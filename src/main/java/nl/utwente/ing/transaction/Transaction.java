@@ -1,6 +1,5 @@
 package nl.utwente.ing.transaction;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
@@ -8,7 +7,6 @@ public class Transaction {
 	private int id;
 	
 	private String externalIBAN;
-	
 	private double amount;
 	private String date;
 	private transactionType type;
@@ -16,10 +14,6 @@ public class Transaction {
 	
 	public enum transactionType{
 		deposit, withdrawal
-	}
-	
-	public Transaction() {
-		
 	}
 	
 	public Transaction(int id, String date, double amount,
