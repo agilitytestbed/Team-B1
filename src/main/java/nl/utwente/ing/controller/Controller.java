@@ -1,8 +1,8 @@
 package nl.utwente.ing.controller;
 
 import java.util.List;
-import java.util.Set;
 
+import nl.utwente.ing.transaction.CategoryRule;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
@@ -24,7 +24,7 @@ import nl.utwente.ing.transaction.Transaction;
 
 
 @RestController
-@RequestMapping(value = "/api/v1" , produces = "application/json", consumes = "application/json")
+@RequestMapping(value = "/api/v2" , produces = "application/json", consumes = "application/json")
 public class Controller {
 
 
@@ -38,17 +38,17 @@ public class Controller {
 	// No/Wrong sessionID
 	@SuppressWarnings("serial")
 	@ResponseStatus(value = HttpStatus.UNAUTHORIZED, reason="Session ID is missing or invalid")
-	public class SessionIDException extends RuntimeException {}
+	private class SessionIDException extends RuntimeException {}
 
 	// Invalid input
 	@SuppressWarnings("serial")
 	@ResponseStatus(value = HttpStatus.METHOD_NOT_ALLOWED, reason="Invalid input given")
-	public class InvalidInputException extends RuntimeException {}
+	private class InvalidInputException extends RuntimeException {}
 
 	// Invalid input
 	@SuppressWarnings("serial")
 	@ResponseStatus(value = HttpStatus.NOT_FOUND, reason="Item(s) not found")
-	public class ItemNotFound extends RuntimeException {}
+	private class ItemNotFound extends RuntimeException {}
 
 
 	// ---------------- Transactions -----------------
@@ -84,9 +84,8 @@ public class Controller {
 		limit = Math.max(limit, 1);
 		limit = Math.min(limit, 100);
 
-		Set<Integer> sessionIds = DatabaseCommunication.getTransactionIds(Integer.parseInt(X_session_ID));
 
-		return DatabaseCommunication.getAllTransactions(offset, limit, categoryID, sessionIds);
+		return DatabaseCommunication.getAllTransactions(offset, limit, categoryID, Integer.parseInt(X_session_ID));
 	}
 
 	// POST
@@ -121,7 +120,7 @@ public class Controller {
 		}
 
 		// Generate new id
-		int newId = DatabaseCommunication.getLastTransactionID() + 1;
+		int newId = DatabaseCommunication.getLastTransactionIndex() + 1;
 		t.setId(newId);
 
 
@@ -133,9 +132,8 @@ public class Controller {
 
 
 		// Create a response add the created object to it
-		ResponseEntity response = new ResponseEntity<Transaction>(t , HttpStatus.CREATED);
 
-		return response;
+		return new ResponseEntity<>(t, HttpStatus.CREATED);
 	}
 
 	// GET
@@ -162,9 +160,7 @@ public class Controller {
 			throw new SessionIDException();
 		}
 
-		Set<Integer> sessionIds = DatabaseCommunication.getTransactionIds(Integer.parseInt(X_session_ID));
-
-		Transaction transaction = DatabaseCommunication.getTransaction(id, sessionIds);
+		Transaction transaction = DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID));
 		if (transaction == null) {
 			throw new ItemNotFound();
 		}
@@ -201,14 +197,12 @@ public class Controller {
 			throw new InvalidInputException();
 		}
 
-		Set<Integer> sessionIds = DatabaseCommunication.getTransactionIds(Integer.parseInt(X_session_ID));
-
-		if (DatabaseCommunication.getTransaction(id, sessionIds) == null) {
+		if (DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID)) == null) {
 			throw new ItemNotFound();
 		}
-		DatabaseCommunication.updateTransaction(t ,id, sessionIds);
+		DatabaseCommunication.updateTransaction(t ,id, Integer.parseInt(X_session_ID));
 
-		return new ResponseEntity<Transaction>(DatabaseCommunication.getTransaction(id, sessionIds), HttpStatus.OK);
+		return new ResponseEntity<>(DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID)), HttpStatus.OK);
 	}
 
 	// DELETE
@@ -236,12 +230,10 @@ public class Controller {
 			throw new SessionIDException();
 		}
 
-		Set<Integer> sessionIds = DatabaseCommunication.getTransactionIds(Integer.parseInt(X_session_ID));
-
-		if (DatabaseCommunication.getTransaction(id, sessionIds) == null) {
+		if (DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID)) == null) {
 			throw new ItemNotFound();
 		}
-		DatabaseCommunication.deleteTransaction(id, sessionIds);
+		DatabaseCommunication.deleteTransaction(id, Integer.parseInt(X_session_ID));
 
 		// Remove it from the sessions
 		DatabaseCommunication.deleteTransactionId(Integer.parseInt(X_session_ID), id);
@@ -274,10 +266,6 @@ public class Controller {
 			throw new SessionIDException();
 		}
 
-
-		Set<Integer> transactionIds = DatabaseCommunication.getTransactionIds(Integer.parseInt(X_session_ID));
-		Set<Integer> categoryIds = DatabaseCommunication.getCategoryIds(Integer.parseInt(X_session_ID));
-
 		// Create a JSON object
 		JSONObject category;
 		int categoryID;
@@ -288,14 +276,14 @@ public class Controller {
 			throw new ItemNotFound();
 		}
 
-		if (DatabaseCommunication.getTransaction(transactionID, transactionIds) == null ||
-				DatabaseCommunication.getCategory(categoryID, categoryIds) == null) {
+		if (DatabaseCommunication.getTransaction(transactionID, Integer.parseInt(X_session_ID)) == null ||
+				DatabaseCommunication.getCategory(categoryID, Integer.parseInt(X_session_ID)) == null) {
 			throw new ItemNotFound();
 		}
 
 		DatabaseCommunication.assignCategory(categoryID, transactionID);
 
-		return new ResponseEntity<Transaction>(DatabaseCommunication.getTransaction(transactionID, transactionIds), HttpStatus.OK);
+		return new ResponseEntity<>(DatabaseCommunication.getTransaction(transactionID, Integer.parseInt(X_session_ID)), HttpStatus.OK);
 	}
 
 	// ---------------- Categories -----------------
@@ -323,9 +311,7 @@ public class Controller {
 			throw new SessionIDException();
 		}
 
-		Set<Integer> sessionIds = DatabaseCommunication.getCategoryIds(Integer.parseInt(X_session_ID));
-
-		return DatabaseCommunication.getAllCategories(sessionIds);
+		return DatabaseCommunication.getAllCategories(Integer.parseInt(X_session_ID));
 	}
 
 	// POST
@@ -358,7 +344,7 @@ public class Controller {
 		}
 
 		// Generate new id
-		int newId = DatabaseCommunication.getLastCategoryID() + 1;
+		int newId = DatabaseCommunication.getLastCategoryIndex() + 1;
 		category.setId(newId);
 
 
@@ -368,7 +354,7 @@ public class Controller {
 
 		DatabaseCommunication.addCategory(category);
 
-		return new ResponseEntity<Category>(category ,HttpStatus.CREATED);
+		return new ResponseEntity<>(category, HttpStatus.CREATED);
 	}
 
 	// GET
@@ -395,9 +381,7 @@ public class Controller {
 			throw new SessionIDException();
 		}
 
-		Set<Integer> sessionIds = DatabaseCommunication.getCategoryIds(Integer.parseInt(X_session_ID));
-
-		Category category = DatabaseCommunication.getCategory(id, sessionIds);
+		Category category = DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID));
 		if (category == null) {
 			throw new ItemNotFound();
 		}
@@ -434,15 +418,13 @@ public class Controller {
 			throw new InvalidInputException();
 		}
 
-		Set<Integer> sessionIds = DatabaseCommunication.getCategoryIds(Integer.parseInt(X_session_ID));
-
-		if (DatabaseCommunication.getCategory(id, sessionIds) == null) {
+		if (DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID)) == null) {
 			throw new ItemNotFound();
 		}
 
-		DatabaseCommunication.updateCategory(category, id, sessionIds);
+		DatabaseCommunication.updateCategory(category, id, Integer.parseInt(X_session_ID));
 
-		return new ResponseEntity<Category>(DatabaseCommunication.getCategory(id, sessionIds), HttpStatus.OK);
+		return new ResponseEntity<>(DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID)), HttpStatus.OK);
 	}
 
 	// DELETE
@@ -470,19 +452,98 @@ public class Controller {
 			throw new SessionIDException();
 		}
 
-		Set<Integer> sessionIds = DatabaseCommunication.getCategoryIds(Integer.parseInt(X_session_ID));
-
-		if (DatabaseCommunication.getCategory(id, sessionIds) == null) {
+		if (DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID)) == null) {
 			throw new ItemNotFound();
 		}
 
-		DatabaseCommunication.deleteCategory(id, sessionIds);
+		DatabaseCommunication.deleteCategory(id, Integer.parseInt(X_session_ID));
 
 		// Remove it from the sessions
 		DatabaseCommunication.deleteCategoryId(Integer.parseInt(X_session_ID), id);
 
 		return new ResponseEntity(HttpStatus.NO_CONTENT);
 	}
+
+	// ---------------- Category Rules -----------------
+    //GET
+    @RequestMapping (value = "/categoryRules", method = RequestMethod.GET, produces = "application/json", consumes = "*")
+    public List<CategoryRule> getCategoryRules(
+            @RequestParam (value = "session_id", required = false) String sessionId) {
+
+	    if (sessionId == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+	        throw new SessionIDException();
+        }
+	    return DatabaseCommunication.getAllCategoryRules(Integer.parseInt(sessionId));
+    }
+
+    //GET
+    @RequestMapping (value = "/categoryRules/{categoryRuleId}", method = RequestMethod.GET, produces = "application/json", consumes = "*")
+    public CategoryRule getCategoryRule(@RequestParam(value = "session_id") String sessionID,
+                                        @PathVariable("categoryRuleId") String categoryRuleId) {
+        int id = Integer.parseInt(categoryRuleId);
+
+	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
+	        throw new SessionIDException();
+        }
+
+	    return DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID));
+    }
+
+    //POST
+    @RequestMapping (value = "/categoryRules", method = RequestMethod.POST, produces = "application/json", consumes = "*")
+    public ResponseEntity<CategoryRule> addCategoryRule(@RequestBody CategoryRule categoryRule,
+                                @RequestParam (value = "session_id") String sessionID) {
+	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
+	        throw new SessionIDException();
+        }
+
+        if (categoryRule == null) {
+	        throw new InvalidInputException();
+        }
+
+        int newID = DatabaseCommunication.getLastCategoryRuleID();
+	    categoryRule.setId(newID);
+	    DatabaseCommunication.addCategoryRulesId(Integer.parseInt(sessionID), categoryRule.getId());
+	    DatabaseCommunication.addCategoryRule(categoryRule);
+
+        return new ResponseEntity<>(categoryRule, HttpStatus.CREATED);
+    }
+
+    //PUT
+    @RequestMapping (value = "/categoryRules/{categoryRuleId}", method = RequestMethod.PUT, produces = "application/json")
+    public ResponseEntity<CategoryRule> putCategoryRule(@RequestBody CategoryRule categoryRule,
+														@RequestParam(value = "session_id") String sessionID,
+														@PathVariable("categoryRuleId") String categoryRuleId) {
+		int id = Integer.parseInt(categoryRuleId);
+	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
+	        throw new SessionIDException();
+        }
+        if (categoryRule == null) {
+	        throw new InvalidInputException();
+        }
+        if (DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID)) == null) {
+            throw new ItemNotFound();
+        }
+        DatabaseCommunication.updateCategoryRule(id, categoryRule, Integer.parseInt(sessionID));
+	    return new ResponseEntity<>(DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID)), HttpStatus.OK);
+    }
+
+    //DELETE
+    @SuppressWarnings("rawtyper")
+    @RequestMapping(value = "/categoryRules/{categoryRuleId}", method = RequestMethod.DELETE, produces = "application/json", consumes = "*")
+    public ResponseEntity deleteCategoyRule(@RequestParam(value = "session_id") String sessionID,
+                                            @PathVariable("categoryRuleId") String categoryRuleId) {
+        int id = Integer.parseInt(categoryRuleId);
+	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
+	        throw new SessionIDException();
+        }
+        if (DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID)) == null) {
+            throw new ItemNotFound();
+        }
+        DatabaseCommunication.deleteCategoryRulesId(id);
+        DatabaseCommunication.deleteCategoryRule(id, Integer.parseInt(sessionID));
+	    return new ResponseEntity(HttpStatus.NO_CONTENT);
+    }
 
 	// ---------------- Sessions -----------------
 	// POST

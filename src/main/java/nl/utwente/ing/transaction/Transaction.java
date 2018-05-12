@@ -10,20 +10,20 @@ public class Transaction {
 	private double amount;
 	private String date;
 	private transactionType type;
-	private Category category;
+	private Category category = null;
+	private String description;
 	
 	public enum transactionType{
 		deposit, withdrawal
 	}
 	
-	public Transaction(int id, String date, double amount,
-			String externalIBAN, String type, Category category) {
+	public Transaction(int id, String date, double amount, String externalIBAN, String type, String description) {
 		setId(id);
 		setAmount(amount);
 		setDate(date);
 		setType(transactionType.valueOf(type));
 		setExternalIBAN(externalIBAN);
-		setCategory(category);
+		this.description = description;
 	}
 
 	public int getId() {
@@ -34,6 +34,9 @@ public class Transaction {
 		this.id = id;
 	}
 
+	public String getDescription() {
+		return description;
+	}
 
 	public double getAmount() {
 		return amount;

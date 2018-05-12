@@ -5,10 +5,6 @@ public class Category {
 	private int id;
 	private String name;
 	
-	public Category() {
-		
-	}
-	
 	public Category(int id, String name) {
 		this.setId(id);
 		this.setName(name);
