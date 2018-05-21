@@ -8,15 +8,7 @@ import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import nl.utwente.ing.transaction.Category;
 import nl.utwente.ing.transaction.DatabaseCommunication;
@@ -24,9 +16,28 @@ import nl.utwente.ing.transaction.Transaction;
 
 
 @RestController
-@RequestMapping(value = "/api/v2" , produces = "application/json", consumes = "application/json")
+@RequestMapping(value = "/api/v1" , produces = "application/json", consumes = "application/json")
 public class Controller {
 
+    private boolean correctJsonTransaction(JSONObject jsonTransaction) {
+        return jsonTransaction.has("date") && jsonTransaction.has("amount") &&
+                jsonTransaction.has("externalIBAN") && jsonTransaction.has("type") &&
+                jsonTransaction.has("description");
+    }
+
+    private boolean checkValidType(String type) {
+        for (Transaction.transactionType search : Transaction.transactionType.values()) {
+            if (search.name().equals(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean correctJsonCategoryRule(JSONObject jsonCategoryRule) {
+        return jsonCategoryRule.has("description") && jsonCategoryRule.has("IBAN") &&
+                jsonCategoryRule.has("type") && jsonCategoryRule.has("categoryId");
+    }
 
 	// ---------------- Exception handling --------------------
 	@ResponseStatus(value=HttpStatus.METHOD_NOT_ALLOWED,
@@ -54,30 +65,30 @@ public class Controller {
 	// ---------------- Transactions -----------------
 	// GET - Offset, limit and category parameter
 
-	@RequestMapping(value = "/transactions")
+	@RequestMapping(value = "/transactions", method = RequestMethod.GET, produces = "application/json", consumes = "*")
 	public List<Transaction> getAllTransactions(
 			@RequestParam(value="offset", defaultValue="0") int offset,
 			@RequestParam(value="limit", defaultValue="20") int limit,
 			@RequestParam(value="category", defaultValue="-1") int categoryID,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
 
 		// Enforce the limits for offset and limit
 		offset = Math.max(offset, 0);
@@ -85,82 +96,88 @@ public class Controller {
 		limit = Math.min(limit, 100);
 
 
-		return DatabaseCommunication.getAllTransactions(offset, limit, categoryID, Integer.parseInt(X_session_ID));
+		return DatabaseCommunication.getAllTransactions(offset, limit, categoryID, Integer.parseInt(sessionId));
 	}
 
 	// POST
-	@SuppressWarnings("rawtypes") // Because we don't care about RensponseEntity's generic type
-	@RequestMapping(method = RequestMethod.POST, value = "/transactions")
+	@RequestMapping(method = RequestMethod.POST, value = "/transactions", produces = "application/json", consumes = "*")
 	public ResponseEntity addTransaction(
-			@RequestBody Transaction t,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
+			@RequestBody String t,
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
 
-		// If it's not a valid transaction
-		if(t == null || !t.validTransaction()) {
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        if(t.isEmpty()) {
 			throw new InvalidInputException();
 		}
 
-		// Generate new id
 		int newId = DatabaseCommunication.getLastTransactionIndex() + 1;
-		t.setId(newId);
+        JSONObject jsonTransaction = new JSONObject(t);
 
+        if (!correctJsonTransaction(jsonTransaction)) {
+            throw new InvalidInputException();
+        }
 
+        if (!checkValidType(jsonTransaction.getString("type"))) {
+            throw new InvalidInputException();
+        }
 
-		//Add the transaction id to the session
-		DatabaseCommunication.addTransactionId(Integer.parseInt(X_session_ID), t.getId());
+        Transaction transaction = new Transaction(newId, jsonTransaction.getString("date"), jsonTransaction.getDouble("amount"),
+                jsonTransaction.getString("externalIBAN"), jsonTransaction.getString("type"), jsonTransaction.getString("description"));
 
-		DatabaseCommunication.addTransaction(t);
+        if (!transaction.validTransaction()) {
+            throw new InvalidInputException();
+        }
 
+        //Add the transaction id to the session
+		DatabaseCommunication.addTransactionId(Integer.parseInt(sessionId), transaction.getId());
+		DatabaseCommunication.addTransaction(transaction);
 
 		// Create a response add the created object to it
-
 		return new ResponseEntity<>(t, HttpStatus.CREATED);
 	}
 
 	// GET
-	@RequestMapping("/transactions/{id}")
+	@RequestMapping(value = "/transactions/{id}", method = RequestMethod.GET, produces = "application/json", consumes = "*")
 	public Transaction getTransaction(
 			@PathVariable int id,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		Transaction transaction = DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID));
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+		Transaction transaction = DatabaseCommunication.getTransaction(id, Integer.parseInt(sessionId));
 		if (transaction == null) {
 			throw new ItemNotFound();
 		}
@@ -169,102 +186,120 @@ public class Controller {
 	}
 
 	// PUT
-	@RequestMapping(method = RequestMethod.PUT, value = "/transactions/{id}")
+	@RequestMapping(method = RequestMethod.PUT, value = "/transactions/{id}", produces = "application/json", consumes = "*")
 	public ResponseEntity<Transaction> updateTransaction(
-			@RequestBody Transaction t ,
+			@RequestBody String t ,
 			@PathVariable int id,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+	    if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		if(t == null || !t.validTransaction()) {
-			throw new InvalidInputException();
-		}
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
 
-		if (DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID)) == null) {
-			throw new ItemNotFound();
-		}
-		DatabaseCommunication.updateTransaction(t ,id, Integer.parseInt(X_session_ID));
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
 
-		return new ResponseEntity<>(DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID)), HttpStatus.OK);
+        if(t.isEmpty()) {
+            throw new InvalidInputException();
+        }
+
+        JSONObject jsonTransaction = new JSONObject(t);
+
+        if (!correctJsonTransaction(jsonTransaction)) {
+            throw new InvalidInputException();
+        }
+
+        if (!checkValidType(jsonTransaction.getString("type"))) {
+            throw new InvalidInputException();
+        }
+
+        Transaction transaction = new Transaction(id, jsonTransaction.getString("date"), jsonTransaction.getDouble("amount"),
+                jsonTransaction.getString("externalIBAN"), jsonTransaction.getString("type"), jsonTransaction.getString("description"));
+
+        if (!transaction.validTransaction()) {
+            throw new InvalidInputException();
+        }
+
+        if (DatabaseCommunication.getTransaction(id, Integer.parseInt(sessionId)) == null) {
+            throw new ItemNotFound();
+        }
+
+		DatabaseCommunication.updateTransaction(transaction ,id, Integer.parseInt(sessionId));
+
+		return new ResponseEntity<>(DatabaseCommunication.getTransaction(id, Integer.parseInt(sessionId)), HttpStatus.OK);
 	}
 
 	// DELETE
 	@SuppressWarnings("rawtypes") // Because we don't care about RensponseEntity's generic type
-	@RequestMapping(method = RequestMethod.DELETE, value = "/transactions/{id}")
+	@RequestMapping(method = RequestMethod.DELETE, value = "/transactions/{id}", produces = "application/json", consumes = "*")
 	public ResponseEntity deleteTransaction(
 			@PathVariable int id,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		if (DatabaseCommunication.getTransaction(id, Integer.parseInt(X_session_ID)) == null) {
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+		if (DatabaseCommunication.getTransaction(id, Integer.parseInt(sessionId)) == null) {
 			throw new ItemNotFound();
 		}
-		DatabaseCommunication.deleteTransaction(id, Integer.parseInt(X_session_ID));
+		DatabaseCommunication.deleteTransaction(id, Integer.parseInt(sessionId));
 
 		// Remove it from the sessions
-		DatabaseCommunication.deleteTransactionId(Integer.parseInt(X_session_ID), id);
+		DatabaseCommunication.deleteTransactionId(Integer.parseInt(sessionId), id);
 
 		return new ResponseEntity(HttpStatus.NO_CONTENT);
 	}
 
 	// PATCH
-	@RequestMapping(method = RequestMethod.PATCH, value = "/transactions/{transactionID}/category")
+	@RequestMapping(method = RequestMethod.PATCH, value = "/transactions/{transactionID}/category", produces = "application/json", consumes = "*")
 	public ResponseEntity<Transaction> assignCategory(
 			@RequestBody String category_id,
 			@PathVariable int transactionID,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
 
 		// Create a JSON object
 		JSONObject category;
@@ -276,112 +311,117 @@ public class Controller {
 			throw new ItemNotFound();
 		}
 
-		if (DatabaseCommunication.getTransaction(transactionID, Integer.parseInt(X_session_ID)) == null ||
-				DatabaseCommunication.getCategory(categoryID, Integer.parseInt(X_session_ID)) == null) {
+		if (DatabaseCommunication.getTransaction(transactionID, Integer.parseInt(sessionId)) == null ||
+				DatabaseCommunication.getCategory(categoryID, Integer.parseInt(sessionId)) == null) {
 			throw new ItemNotFound();
 		}
 
 		DatabaseCommunication.assignCategory(categoryID, transactionID);
 
-		return new ResponseEntity<>(DatabaseCommunication.getTransaction(transactionID, Integer.parseInt(X_session_ID)), HttpStatus.OK);
+		return new ResponseEntity<>(DatabaseCommunication.getTransaction(transactionID, Integer.parseInt(sessionId)), HttpStatus.OK);
 	}
 
 	// ---------------- Categories -----------------
 
 	// GET
-	@RequestMapping("/categories")
+	@RequestMapping(value = "/categories", method = RequestMethod.GET, produces = "application/json", consumes = "*")
 	public List<Category> getCategories(
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		return DatabaseCommunication.getAllCategories(Integer.parseInt(X_session_ID));
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+		return DatabaseCommunication.getAllCategories(Integer.parseInt(sessionId));
 	}
 
 	// POST
-	@RequestMapping(method = RequestMethod.POST, value = "/categories")
+	@RequestMapping(method = RequestMethod.POST, value = "/categories", produces = "application/json", consumes = "*")
 	public ResponseEntity<Category> addCategory(
-			@RequestBody Category category,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
+			@RequestBody String category,
+			@RequestParam(value="session_id", required = false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
 
-		if (category == null || !category.validCategory()) {
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        if (category.isEmpty()) {
+            throw new InvalidInputException();
+        }
+
+        int newId = DatabaseCommunication.getLastCategoryIndex() + 1;
+        JSONObject jsonCategory = new JSONObject(category);
+
+        if (!jsonCategory.has("name")) {
+            throw new InvalidInputException();
+        }
+
+        Category c = new Category(newId, jsonCategory.getString("name"));
+
+		if (!c.validCategory()) {
 			throw new InvalidInputException();
 		}
 
-		// Generate new id
-		int newId = DatabaseCommunication.getLastCategoryIndex() + 1;
-		category.setId(newId);
-
-
-
 		//Add the category id to the session
-		DatabaseCommunication.addCategoryId(Integer.parseInt(X_session_ID), category.getId());
+		DatabaseCommunication.addCategoryId(Integer.parseInt(sessionId), c.getId());
+		DatabaseCommunication.addCategory(c);
 
-		DatabaseCommunication.addCategory(category);
-
-		return new ResponseEntity<>(category, HttpStatus.CREATED);
+		return new ResponseEntity<>(c, HttpStatus.CREATED);
 	}
 
 	// GET
-	@RequestMapping("/categories/{id}")
+	@RequestMapping(value = "/categories/{id}", method = RequestMethod.GET, produces = "application/json", consumes = "*")
 	public Category getCategory(
 			@PathVariable int id,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+	    if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		Category category = DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID));
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+		Category category = DatabaseCommunication.getCategory(id, Integer.parseInt(sessionId));
 		if (category == null) {
 			throw new ItemNotFound();
 		}
@@ -390,76 +430,82 @@ public class Controller {
 	}
 
 	// PUT
-	@RequestMapping(method = RequestMethod.PUT, value = "/categories/{id}")
+	@RequestMapping(method = RequestMethod.PUT, value = "/categories/{id}", produces = "application/json", consumes = "*")
 	public ResponseEntity<Category> putCategory(
-			@RequestBody Category category ,
-			@RequestParam(value="session_id", required =false) String session_id,
+			@RequestBody String category ,
+			@RequestParam(value="session_id", required =false) String sessionId,
 			@PathVariable int id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		if (category == null || !category.validCategory()) {
-			throw new InvalidInputException();
-		}
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
 
-		if (DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID)) == null) {
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        JSONObject jsonCategory = new JSONObject(category);
+
+        if (!jsonCategory.has("name")) {
+            throw new InvalidInputException();
+        }
+
+        Category c = new Category(id, jsonCategory.getString("name"));
+
+        if (!c.validCategory()) {
+            throw new InvalidInputException();
+        }
+
+		if (DatabaseCommunication.getCategory(id, Integer.parseInt(sessionId)) == null) {
 			throw new ItemNotFound();
 		}
 
-		DatabaseCommunication.updateCategory(category, id, Integer.parseInt(X_session_ID));
+		DatabaseCommunication.updateCategory(c, id, Integer.parseInt(sessionId));
 
-		return new ResponseEntity<>(DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID)), HttpStatus.OK);
+		return new ResponseEntity<>(DatabaseCommunication.getCategory(id, Integer.parseInt(sessionId)), HttpStatus.OK);
 	}
 
 	// DELETE
 	@SuppressWarnings("rawtypes") // Because we don't care about RensponseEntity's generic type
-	@RequestMapping(method = RequestMethod.DELETE, value = "/categories/{id}")
+	@RequestMapping(method = RequestMethod.DELETE, value = "/categories/{id}", produces = "application/json", consumes = "*")
 	public ResponseEntity deleteCategory(
 			@PathVariable int id,
-			@RequestParam(value="session_id", required =false) String session_id,
-			@RequestHeader(value = "X-session-ID", required=false) String X_session_ID) {
-		// Throw an exception if the two session variables are both null or both are not null but are different from each other
-		if ((X_session_ID == null && session_id == null) ||
-				(X_session_ID != null && session_id != null && !X_session_ID.equals(session_id))
-				) {
-			throw new SessionIDException();
-		}
+			@RequestParam(value="session_id", required =false) String sessionId,
+            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-		// Only the case in which one of them is null remains
-		// We use X_session_ID to represent the actual session id and proceed from there
-		if (X_session_ID == null) {
-			X_session_ID = session_id;
-		}
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
 
-		// If the session id is not in the session, throw an exception
-		if (!DatabaseCommunication.validSessionId(Integer.parseInt(X_session_ID))) {
-			throw new SessionIDException();
-		}
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
 
-		if (DatabaseCommunication.getCategory(id, Integer.parseInt(X_session_ID)) == null) {
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+		if (DatabaseCommunication.getCategory(id, Integer.parseInt(sessionId)) == null) {
 			throw new ItemNotFound();
 		}
 
-		DatabaseCommunication.deleteCategory(id, Integer.parseInt(X_session_ID));
-
+		DatabaseCommunication.deleteCategory(id, Integer.parseInt(sessionId));
 		// Remove it from the sessions
-		DatabaseCommunication.deleteCategoryId(Integer.parseInt(X_session_ID), id);
+		DatabaseCommunication.deleteCategoryId(Integer.parseInt(sessionId), id);
 
 		return new ResponseEntity(HttpStatus.NO_CONTENT);
 	}
@@ -468,80 +514,190 @@ public class Controller {
     //GET
     @RequestMapping (value = "/categoryRules", method = RequestMethod.GET, produces = "application/json", consumes = "*")
     public List<CategoryRule> getCategoryRules(
-            @RequestParam (value = "session_id", required = false) String sessionId) {
+            @RequestParam (value = "session_id", required = false) String sessionId,
+			@RequestHeader (value = "X-session-ID", required = false) String sessionIDHeader) {
 
-	    if (sessionId == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
-	        throw new SessionIDException();
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
         }
+
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+
 	    return DatabaseCommunication.getAllCategoryRules(Integer.parseInt(sessionId));
     }
 
     //GET
     @RequestMapping (value = "/categoryRules/{categoryRuleId}", method = RequestMethod.GET, produces = "application/json", consumes = "*")
-    public CategoryRule getCategoryRule(@RequestParam(value = "session_id") String sessionID,
+    public CategoryRule getCategoryRule(@RequestParam(value = "session_id", required = false) String sessionId,
+                                        @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
                                         @PathVariable("categoryRuleId") String categoryRuleId) {
         int id = Integer.parseInt(categoryRuleId);
 
-	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
-	        throw new SessionIDException();
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
         }
 
-	    return DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID));
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        if (DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionId)) == null) {
+            throw new ItemNotFound();
+        }
+
+	    return DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionId));
     }
 
     //POST
     @RequestMapping (value = "/categoryRules", method = RequestMethod.POST, produces = "application/json", consumes = "*")
-    public ResponseEntity<CategoryRule> addCategoryRule(@RequestBody CategoryRule categoryRule,
-                                @RequestParam (value = "session_id") String sessionID) {
-	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
-	        throw new SessionIDException();
-        }
+    public ResponseEntity<CategoryRule> addCategoryRule(@RequestBody String categoryRule,
+                                                        @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
+                                                        @RequestParam(value = "session_id", required = false) String sessionId) {
 
-        if (categoryRule == null) {
+	    if (categoryRule.isEmpty()) {
 	        throw new InvalidInputException();
         }
 
-        int newID = DatabaseCommunication.getLastCategoryRuleID();
-	    categoryRule.setId(newID);
-	    DatabaseCommunication.addCategoryRulesId(Integer.parseInt(sessionID), categoryRule.getId());
-	    DatabaseCommunication.addCategoryRule(categoryRule);
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
 
-        return new ResponseEntity<>(categoryRule, HttpStatus.CREATED);
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        JSONObject jsonCategoryRule = new JSONObject(categoryRule);
+
+	    if (!correctJsonCategoryRule(jsonCategoryRule)) {
+	        throw new InvalidInputException();
+        }
+
+        if (!checkValidType(jsonCategoryRule.getString("type"))) {
+	        throw new InvalidInputException();
+        }
+
+        int newID = DatabaseCommunication.getLastCategoryRuleID() + 1;
+	    String description = jsonCategoryRule.getString("description");
+	    String IBAN = jsonCategoryRule.getString("IBAN");
+	    String type = jsonCategoryRule.getString("type");
+	    int categoryId = jsonCategoryRule.getInt("categoryId");
+        CategoryRule cr = new CategoryRule(newID, description, IBAN, type, categoryId);
+
+	    DatabaseCommunication.addCategoryRulesId(Integer.parseInt(sessionId), newID);
+	    DatabaseCommunication.addCategoryRule(cr);
+
+        return new ResponseEntity<>(cr, HttpStatus.CREATED);
     }
 
     //PUT
     @RequestMapping (value = "/categoryRules/{categoryRuleId}", method = RequestMethod.PUT, produces = "application/json")
-    public ResponseEntity<CategoryRule> putCategoryRule(@RequestBody CategoryRule categoryRule,
-														@RequestParam(value = "session_id") String sessionID,
+    public ResponseEntity<CategoryRule> putCategoryRule(@RequestBody String categoryRule,
+														@RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
+														@RequestParam(value = "session_id", required = false) String sessionId,
 														@PathVariable("categoryRuleId") String categoryRuleId) {
 		int id = Integer.parseInt(categoryRuleId);
-	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
-	        throw new SessionIDException();
+        if (categoryRule.isEmpty()) {
+
+            throw new InvalidInputException();
         }
-        if (categoryRule == null) {
-	        throw new InvalidInputException();
+
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
         }
-        if (DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID)) == null) {
-            throw new ItemNotFound();
+
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
         }
-        DatabaseCommunication.updateCategoryRule(id, categoryRule, Integer.parseInt(sessionID));
-	    return new ResponseEntity<>(DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID)), HttpStatus.OK);
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        JSONObject jsonCategoryRule = new JSONObject(categoryRule);
+
+        if (!correctJsonCategoryRule(jsonCategoryRule)) {
+            throw new InvalidInputException();
+        }
+
+        if (!checkValidType(jsonCategoryRule.getString("type"))) {
+            throw new InvalidInputException();
+        }
+
+        String description = jsonCategoryRule.getString("description");
+        String IBAN = jsonCategoryRule.getString("IBAN");
+        String type = jsonCategoryRule.getString("type");
+        int categoryId = jsonCategoryRule.getInt("categoryId");
+        CategoryRule cr = new CategoryRule(id, description, IBAN, type, categoryId);
+
+        DatabaseCommunication.updateCategoryRule(id, cr, Integer.parseInt(sessionId));
+	    return new ResponseEntity<>(DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionIDHeader)), HttpStatus.OK);
     }
 
     //DELETE
     @SuppressWarnings("rawtyper")
     @RequestMapping(value = "/categoryRules/{categoryRuleId}", method = RequestMethod.DELETE, produces = "application/json", consumes = "*")
-    public ResponseEntity deleteCategoyRule(@RequestParam(value = "session_id") String sessionID,
+    public ResponseEntity deleteCategoyRule(@RequestParam(value = "session_id", required = false) String sessionId,
+                                            @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
                                             @PathVariable("categoryRuleId") String categoryRuleId) {
         int id = Integer.parseInt(categoryRuleId);
-	    if (sessionID == null || !DatabaseCommunication.validSessionId(Integer.parseInt(sessionID))) {
-	        throw new SessionIDException();
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
         }
-        if (DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionID)) == null) {
+
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        if (DatabaseCommunication.getCategoryRules(id, Integer.parseInt(sessionId)) == null) {
             throw new ItemNotFound();
         }
-        DatabaseCommunication.deleteCategoryRulesId(id);
-        DatabaseCommunication.deleteCategoryRule(id, Integer.parseInt(sessionID));
+
+        DatabaseCommunication.deleteCategoryRule(id, Integer.parseInt(sessionId));
+        DatabaseCommunication.deleteCategoryRulesId(id, Integer.parseInt(sessionId));
 	    return new ResponseEntity(HttpStatus.NO_CONTENT);
     }
 

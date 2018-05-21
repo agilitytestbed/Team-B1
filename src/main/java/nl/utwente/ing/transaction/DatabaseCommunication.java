@@ -57,8 +57,8 @@ public class DatabaseCommunication {
         executeSQL(sql);
 
         sql = "CREATE TABLE IF NOT EXISTS categoryRuleSessions (" +
-                "session integer PRIMARY KEY," +
-                "categoryRule" +
+                "session integer," +
+                "categoryRule integer" +
                 ");";
         executeSQL(sql);
 
@@ -80,13 +80,13 @@ public class DatabaseCommunication {
         executeSQL(sql);
 
         sql = "CREATE TABLE IF NOT EXISTS transactionSessions (" +
-                "session integer PRIMARY KEY," +
+                "session integer," +
                 "transactions text" +
                 ")";
         executeSQL(sql);
 
         sql = "CREATE TABLE IF NOT EXISTS categorySessions (" +
-                "session integer PRIMARY KEY," +
+                "session integer," +
                 "categories text" +
                 ")";
         executeSQL(sql);
@@ -96,128 +96,114 @@ public class DatabaseCommunication {
 	/*
 	 * -------------------- Code for handling sessions --------------------
 	 */
-	public static Set<Integer> getTransactionIds(int sessionID) {
-		Set<Integer> ids = new HashSet<>();
-		
-		String sql = "SELECT * FROM transactionSessions WHERE session == ?";
-		try (Connection conn = connect();
-	             PreparedStatement pstmt  = conn.prepareStatement(sql)) {
-	        pstmt.setInt(1, sessionID);
-	        ResultSet rs  = pstmt.executeQuery();
-	            
-	        if (rs.next() && rs.getString("transactions") != null) {
-		        	for (String segment : new ArrayList<String>(Arrays.asList(rs.getString("transactions").split(",")))) {
-		        		ids.add(Integer.parseInt(String.valueOf(segment)));
-		        	}
-	        }
-	    } catch (SQLException e) {
-	        System.out.println(e.getMessage());
-	    }
-		
-		return ids;
-	}
-	
-	public static Set<Integer> getCategoryIds(int sessionID) {
-		Set<Integer> ids = new HashSet<>();
-		
-		String sql = "SELECT * FROM categorySessions WHERE session == ?";
-		try (Connection conn = connect();
-	             PreparedStatement pstmt  = conn.prepareStatement(sql)) {
-	        pstmt.setInt(1, sessionID);
-	        ResultSet rs  = pstmt.executeQuery();
-	            
-	        if (rs.next() && rs.getString("categories") != null) {
-		        	for (String segment : new ArrayList<String>(Arrays.asList(rs.getString("categories").split(",")))) {
-		        		ids.add(Integer.parseInt(String.valueOf(segment)));
-		        	}
-	        }
-	    } catch (SQLException e) {
-	        System.out.println(e.getMessage());
-	    }
-		
-		return ids;
-	}
 
-	public static Set<Integer> getCategoryRulesIds(int sessionID) {
-	    Set<Integer> ids = new HashSet<>();
-
-	    String sql = "SELECT * FROM categoryRuleSessions WHERE session == ?";
-	    try (Connection conn = connect();
-                    PreparedStatement psmt = conn.prepareStatement(sql)) {
-	        psmt.setInt(1, sessionID);
-	        ResultSet rs = psmt.executeQuery();
-
-	        if (rs.next() && rs.getString("categoryRule") != null) {
-	            for (String segment : new ArrayList<String>(Arrays.asList(rs.getString("categoryRule").split(",")))) {
-	                ids.add(Integer.parseInt(String.valueOf(segment)));
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return ids;
-    }
-
+    /**
+     * Adds a new transaction in the transactionSessions table.
+     * Before doing this it checks if the transaction is already in the table with the given sessionID.
+     * @param sessionID id of the session.
+     * @param id id of the transaction.
+     */
 	public static void addTransactionId(int sessionID, int id) {
-		String sql = "UPDATE transactionSessions SET transactions = ? WHERE session = ?";
-		
-		try (Connection conn = connect();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
-			Set<Integer> currentIds = getTransactionIds(sessionID);
-			currentIds.add(id);
-			String newIdList = "";
-			for (int i : currentIds) {
-				newIdList += "," +String.valueOf(i);
-			}
-			// Substring to remove the first comma
-            pstmt.setString(1, newIdList.substring(1));
-            pstmt.setInt(2, sessionID);
-            pstmt.executeUpdate();
-        } catch (SQLException e) {
-            System.out.println(e.getMessage());
-        }
-	}
-	
-	public static void addCategoryId(int sessionID, int id) {
-		String sql = "UPDATE categorySessions SET categories = ? WHERE session = ?";
-		
-		try (Connection conn = connect();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
-			Set<Integer> currentIds = getCategoryIds(sessionID);
-			currentIds.add(id);
-			String newIdList = "";
-			for (int i : currentIds) {
-				newIdList += "," +String.valueOf(i);
-			}
-			// Substring to remove the first comma
-            pstmt.setString(1, newIdList.substring(1));
-            pstmt.setInt(2, sessionID);
-            pstmt.executeUpdate();
-        } catch (SQLException e) {
-            System.out.println(e.getMessage());
-        }
-	}
-
-	public static void addCategoryRulesId(int sessionID, int id) {
-	    String sql = "UPDATE categoryRuleSessions SET categoryRule = ? WHERE session = ?";
-
-	    try (Connection conn = connect();
-                    PreparedStatement stmt = conn.prepareStatement(sql)) {
-            Set<Integer> currentIds = getCategoryRulesIds(sessionID);
-            currentIds.add(id);
-            String newIdList = "";
-            for (int i : currentIds) {
-                newIdList += "," +String.valueOf(i);
+        String sql = "SELECT * FROM transactionSessions WHERE session = ? AND transactions = ?;";
+        boolean add = false;
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, sessionID);
+            pstmt.setInt(2, id);
+            ResultSet result = pstmt.executeQuery();
+            if (!result.next()) {
+                add = true;
             }
-
-            stmt.setString(1, newIdList.substring(1));
-            stmt.setInt(2, sessionID);
-            stmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        if (add) {
+            sql = "INSERT INTO transactionSessions VALUES (?, ?)";
+
+            try (Connection conn = connect();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setInt(1, sessionID);
+                pstmt.setInt(2, id);
+                pstmt.executeUpdate();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+	}
+
+    /**
+     * Adds a new category in the categorySessions table.
+     * Before doing this it checks if the category is already in the table with the given sessionID.
+     * @param sessionID id of the session.
+     * @param id id of the category.
+     */
+	public static void addCategoryId(int sessionID, int id) {
+        String sql = "SELECT * FROM categorySessions WHERE session = ? AND categories = ?;";
+        boolean add = false;
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, sessionID);
+            pstmt.setInt(2, id);
+            ResultSet result = pstmt.executeQuery();
+            if (!result.next()) {
+                add = true;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        if (add) {
+            sql = "INSERT INTO categorySessions VALUES (?, ?)";
+
+            try (Connection conn = connect();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setInt(1, sessionID);
+                pstmt.setInt(2, id);
+                pstmt.executeUpdate();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+	}
+
+    /**
+     * Adds a new categoryRule in the categoryRuleSessions table.
+     * Before doing this it checks if the categoryRule is already in the table with the given sessionID.
+     * @param sessionID id of the session.
+     * @param id id of the categoryRule.
+     */
+	public static void addCategoryRulesId(int sessionID, int id) {
+		String sql = "SELECT * FROM categoryRuleSessions WHERE session = ? AND categoryRule = ?;";
+		boolean add = false;
+		try (Connection conn = connect();
+                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		    pstmt.setInt(1, sessionID);
+		    pstmt.setInt(2, id);
+		    ResultSet result = pstmt.executeQuery();
+		    if (!result.next()) {
+		        add = true;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        if (add) {
+            sql = "INSERT INTO categoryRuleSessions VALUES (?, ?)";
+
+            try (Connection conn = connect();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setInt(1, sessionID);
+                pstmt.setInt(2, id);
+                pstmt.executeUpdate();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+
     }
-	
+
+    /**
+     * Adds a new session id to every session table.
+     * @param sessionID id of the session.
+     */
 	public static void addSession(int sessionID) {
 		// Add transaction session
 		String sql = "INSERT INTO transactionSessions(session) VALUES(?)";
@@ -250,6 +236,10 @@ public class DatabaseCommunication {
         }
     }
 
+    /**
+     * Gets the maximum session id.
+     * @return maximum sessionID or -1 if the table is empty.
+     */
     public static int getMaxSessionId() {
         String sql = "SELECT max(session) from transactionSessions";
         try (Connection conn = connect();
@@ -266,6 +256,11 @@ public class DatabaseCommunication {
         return -1;
     }
 
+    /**
+     * Checks if the sessionID is valid or not.
+     * @param sessionID id of the session.
+     * @return true if the session is valid, false otherwise.
+     */
 	public static boolean validSessionId(int sessionID) {
 		String sql = "SELECT * FROM transactionSessions " +
                     "WHERE session == ?;";
@@ -273,54 +268,44 @@ public class DatabaseCommunication {
 			 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 			pstmt.setInt(1, sessionID);
 			ResultSet rs  = pstmt.executeQuery();
-            if (rs != null) {
-                return true;
-            }
+            return rs.next();
 		} catch (SQLException e) {
 			System.out.println(e.getMessage());
 		}
-
-
 		return false;
 	}
-	
+
+    /**
+     * Deletes a transactions from the transactionSessions table
+     * @param id of the transaction
+     * @param sessionID id of the session
+     */
 	public static void deleteTransactionId(int sessionID, int id) {
-		String sql = "UPDATE transactionSessions SET transactions = ? WHERE session = ?";
+		String sql = "DELETE FROM transactionSessions WHERE session = ? AND transactions = ?;";
 		
 		try (Connection conn = connect();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
-			Set<Integer> currentIds = getTransactionIds(sessionID);
-
-			String newIdList = "";
-			for (int i : currentIds) {
-				if (i != id) {
-					newIdList += "," +String.valueOf(i);
-				}
-			}
 			// Substring to remove the first comma
-            pstmt.setString(1, newIdList.substring(1));
-            pstmt.setInt(2, sessionID);
+            pstmt.setInt(1, sessionID);
+            pstmt.setInt(2, id);
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
 	}
-	
+
+    /**
+     * Deletes a category from the categorySessions table
+     * @param id of the category
+     * @param sessionID id of the session
+     */
 	public static void deleteCategoryId(int sessionID, int id) {
-		String sql = "UPDATE categorySessions SET categories = ? WHERE session = ?";
+		String sql = "DELETE FROM categorySessions WHERE categories = ? AND session = ?";
 		
 		try (Connection conn = connect();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
-			Set<Integer> currentIds = getCategoryIds(sessionID);
-
-			String newIdList = "";
-			for (int i : currentIds) {
-				if (i != id) {
-					newIdList += "," +String.valueOf(i);
-				}
-			}
 			// Substring to remove the first comma
-            pstmt.setString(1, newIdList.substring(1));
+            pstmt.setInt(1, id);
             pstmt.setInt(2, sessionID);
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -328,17 +313,28 @@ public class DatabaseCommunication {
         }
 	}
 
-	public static void deleteCategoryRulesId(int id) {
-	    String sql = "UPDATE categoryRuleSessions SET categoryRule = NULL WHERE categoryRule = ?;";
+    /**
+     * Deletes a categoryRule from the categoryRuleSessions table
+     * @param id of the categoryRule
+     * @param sessionID id of the session
+     */
+	public static void deleteCategoryRulesId(int id, int sessionID) {
+	    String sql = "DELETE FROM categoryRuleSessions WHERE categoryRule = ? AND session = ?;";
+
 	    try (Connection conn = connect();
                     PreparedStatement stmt = conn.prepareStatement(sql)) {
 	        stmt.setInt(1, id);
+	        stmt.setInt(2, sessionID);
 	        stmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
     }
 
+    /**
+     * Gets a list with all transactions.
+     * @return List with transactions.
+     */
     public static List<Transaction> getTransactions() {
 	    List<Transaction> t = new ArrayList<>();
 	    String sql = "SELECT * FROM transactions;";
@@ -346,6 +342,7 @@ public class DatabaseCommunication {
                     PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
 	        ResultSet result = pstmt.executeQuery();
+	        Map<Integer, String> c = getCategories();
 	        while(result.next()) {
 	            int id = result.getInt("id");
 	            String date = result.getString("date");
@@ -354,19 +351,24 @@ public class DatabaseCommunication {
 	            String type = result.getString("type");
 	            String description = result.getString("description");
 	            int categoryId = result.getInt("categoryID");
-	            Map<Integer, String> c = getCategories();
 	            Transaction transaction = new Transaction(id, date, amount, iBAN, type, description);
 	            if (c.containsKey(categoryId)) {
                     transaction.setCategory(new Category(categoryId, c.get(categoryId)));
                 }
-	            t.add(new Transaction(id, date, amount, iBAN, type, description));
+	            t.add(transaction);
             }
+            return t;
         } catch (SQLException e) {
             e.printStackTrace();
         }
         return t;
     }
 
+    /**
+     * Returns a Map with all the categories.
+     * Each name is mapped to an id.
+     * @return Map with all categories.
+     */
     public static Map<Integer, String> getCategories() {
 	    Map<Integer, String> c = new HashMap<>();
 	    String sql = "SELECT * FROM categories;";
@@ -384,6 +386,10 @@ public class DatabaseCommunication {
         return c;
     }
 
+    /**
+     * Returns a list with all the categoryRules.
+     * @return categoryRules list.
+     */
     public static List<CategoryRule> getCategoryRules() {
 	    List<CategoryRule> cr = new ArrayList<>();
 	    String sql = "SELECT * FROM categoryRules;";
@@ -417,19 +423,20 @@ public class DatabaseCommunication {
      * 		int representing the largest category index or -1 if there are no entries
      */
     public static int getLastCategoryIndex() {
-        String sql = "SELECT  MAX(id) FROM categories;";
+        String sql = "SELECT c.id FROM categories AS c WHERE NOT EXISTS " +
+                "(SELECT id FROM categories WHERE id = c.id + 1) LIMIT 0,1";
         try (Connection conn = connect();
              Statement stmt  = conn.createStatement();
              ResultSet rs    = stmt.executeQuery(sql)){
 
             if (rs.next()) {
-                return rs.getInt("id");
+                return rs.getInt(1);
             }
             return 1;
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
-        return -1;
+        return 0;
     }
 
     /**
@@ -438,13 +445,13 @@ public class DatabaseCommunication {
      * 		int representing the largest transaction index or -1 if there are no entries
      */
     public static int getLastTransactionIndex() {
-        String sql = "SELECT  MAX(id) FROM transactions;";
+        String sql = "SELECT t.id FROM transactions AS t WHERE NOT EXISTS " +
+                "(SELECT id FROM transactions WHERE id = t.id + 1) LIMIT 0,1";
         try (Connection conn = connect();
              Statement stmt  = conn.createStatement();
              ResultSet rs    = stmt.executeQuery(sql)){
-
             if (rs.next()) {
-                return rs.getInt("id");
+                return rs.getInt(1);
             }
             return 1;
         } catch (SQLException e) {
@@ -470,9 +477,15 @@ public class DatabaseCommunication {
 	        ResultSet rs  = pstmt.executeQuery();
 	            
 	        if (rs.next()) {
-	            return new Transaction(rs.getInt("id"), rs.getString("date"),
-	            		rs.getDouble("amount"), rs.getString("externalIBAN"), rs.getString("type"),
-	            		rs.getString("description"));
+	            int categoryId = rs.getInt("categoryID");
+	        	Transaction t = new Transaction(rs.getInt("id"), rs.getString("date"),
+						rs.getDouble("amount"), rs.getString("externalIBAN"), rs.getString("type"),
+						rs.getString("description"));
+                Map<Integer, String> c = getCategories();
+                if (c.containsKey(categoryId)) {
+                    t.setCategory(new Category(categoryId, c.get(categoryId)));
+                }
+	        	return t;
 	        }
 	    } catch (SQLException e) {
 	        System.out.println(e.getMessage());
@@ -499,9 +512,6 @@ public class DatabaseCommunication {
 		sql += " LIMIT ?,?;";
 		try (Connection conn = connect();
 		     PreparedStatement pstmt  = conn.prepareStatement(sql)) {
-
-			
-			
 			if (categoryID != -1) {
 				pstmt.setInt(1, categoryID);
 				pstmt.setInt(2, sessionId);
@@ -512,12 +522,13 @@ public class DatabaseCommunication {
 				pstmt.setInt(2, offset);
 				pstmt.setInt(3, limit);
 			}
-				
 			ResultSet rs  = pstmt.executeQuery();
+			Transaction t;
+			Map<Integer, String> c = getCategories();
 	        while (rs.next()) {
-	        		transactions.add(new Transaction(rs.getInt("id"), rs.getString("date"),
-	    	            	rs.getDouble("amount"), rs.getString("externalIBAN"), rs.getString("type"),
-	    	            	rs.getString("description")));
+	        	t = new Transaction(rs.getInt("id"), rs.getString("date"), rs.getDouble("amount"), rs.getString("externalIBAN"), rs.getString("type"), rs.getString("description"));
+	        	t.setCategory(new Category(rs.getInt("categoryID"), c.get(rs.getInt("categoryID"))));
+	            transactions.add(t);
 	        }
 	        return transactions;
 	    } catch (SQLException e) {
@@ -607,6 +618,12 @@ public class DatabaseCommunication {
         }
     }
 
+    /**
+     * Get a categoryRule based on id and sessionID.
+     * @param id of the category rule.
+     * @param sessionID id of the session.
+     * @return the category rule with given id and session id.
+     */
     public static CategoryRule getCategoryRules(int id, int sessionID) {
 	    CategoryRule cr = null;
 	    String sql = "SELECT * FROM categoryRules WHERE id = ? AND id IN " +
@@ -616,21 +633,29 @@ public class DatabaseCommunication {
 	        pstmt.setInt(1, id);
 	        pstmt.setInt(2, sessionID);
 	        ResultSet rs = pstmt.executeQuery();
-	        cr = new CategoryRule(rs.getInt("id"), rs.getString("description"), rs.getString("IBAN"),
-                                rs.getString("type"), rs.getInt("categoryId"));
-	        cr.setApplyOnHistory(rs.getBoolean("applyOnHistory"));
-	        return cr;
+	        if (rs.next()) {
+                cr = new CategoryRule(rs.getInt(1), rs.getString(2), rs.getString(3),
+                        rs.getString(4), rs.getInt(5));
+                cr.setApplyOnHistory(rs.getBoolean(6));
+                return cr;
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
         return cr;
     }
 
+    /**
+     * Updates the categoryRule with given id and session id.
+     * @param id of the categoryRule.
+     * @param categoryRule the new categoryRule.
+     * @param sessionID id of the session.
+     */
     public static void updateCategoryRule(int id, CategoryRule categoryRule, int sessionID) {
 	    String sql = "UPDATE categoryRules " +
                 "SET description = ?, " +
-                "IBAN = ? " +
-                "type = ? " +
+                "IBAN = ?, " +
+                "type = ?, " +
                 "categoryID = ? " +
                 "WHERE id = ? " +
                 "AND id IN " +
@@ -649,6 +674,11 @@ public class DatabaseCommunication {
         }
     }
 
+    /**
+     * Deletes the categoryRule with given id and session id.
+     * @param id of the categoryRule.
+     * @param sessionID of the categoryRule.
+     */
     public static void deleteCategoryRule(int id, int sessionID) {
 	    String sql = "DELETE FROM categoryRules WHERE id = ? AND id IN " +
                 "(SELECT categoryRule FROM categoryRuleSessions WHERE session = ?);";
@@ -662,22 +692,29 @@ public class DatabaseCommunication {
         }
     }
 
+    /**
+     * Gets the first categoryRule id for which there is no id that equals the current plus 1.
+     * @return the Id of the categoryRule or 0 if the table is empty.
+     */
     public static int getLastCategoryRuleID() {
-	    int id = -1;
-	    String sql = "SELECT MAX(id) FROM categoryRules";
+	    String sql = "SELECT cr.id FROM categoryRules AS cr WHERE NOT EXISTS " +
+                "(SELECT id FROM categoryRules WHERE id = cr.id + 1) LIMIT 0,1";
 	    try (Connection conn = connect();
                     PreparedStatement pstmt = conn.prepareStatement(sql)) {
 	        ResultSet rs = pstmt.executeQuery();
-	        id = rs.getInt("id");
-	        return id;
+	        if (rs.next()) {
+                return rs.getInt(1);
+            }
+            return 0;
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        return id;
+        return 0;
     }
 
     /**
      * Adds a categoryRule object to the database.
+     * Also it searches for a transaction for which it can set the categoryID.
      * @param cr CategoryRule object.
      */
 	public static void addCategoryRule(CategoryRule cr) {
@@ -699,10 +736,12 @@ public class DatabaseCommunication {
         List<Transaction> t = getTransactions();
         Map<Integer, String> c = getCategories();
         for (Transaction search : t) {
+            System.out.println(search.getCategory());
             if ((search.getExternalIBAN().equals(cr.getiBan()) || cr.getiBan().isEmpty()) &&
                     (search.getType() == cr.getType() || (cr.getType() == null)) &&
                     (search.getDescription().equals(cr.getDescription()) || cr.getDescription().isEmpty()) &&
-                    (search.getCategory() == null) && c.containsKey(cr.getCategoryId())) {
+                    (search.getCategory() == null) &&
+                    c.containsKey(cr.getCategoryId())) {
                 sql = "UPDATE transactions SET categoryID = ? WHERE id = ?";
                 String sql2 = "UPDATE categoryRules SET applyOnHistory = ? WHERE id = ?";
                 try (Connection conn = connect();
@@ -733,7 +772,8 @@ public class DatabaseCommunication {
 		String sql = "UPDATE transactions SET date = ? , "
                 + "amount = ? , "
                 + "externalIBAN = ? , "
-                + "type = ? "
+                + "type = ? ,"
+				+ "description = ?"
                 + "WHERE id = ? AND id IN "
                 + "(SELECT transactions FROM transactionSessions WHERE session = ?)";
         try (Connection conn = connect();
@@ -743,8 +783,9 @@ public class DatabaseCommunication {
             pstmt.setDouble(2, t.getAmount());
             pstmt.setString(3, t.getExternalIBAN());
             pstmt.setString(4, t.getType().toString());
-            pstmt.setInt(5, id);
-            pstmt.setInt(6, sessionId);
+            pstmt.setString(5, t.getDescription());
+            pstmt.setInt(6, id);
+            pstmt.setInt(7, sessionId);
             // update 
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -759,7 +800,7 @@ public class DatabaseCommunication {
 	 */
 	public static void deleteTransaction(int id, int sessionId) {
         String sql = "DELETE FROM transactions WHERE id = ? and id IN " +
-                "(SELECT transactions FROM transactionSession WHERE session = ?)";
+                "(SELECT transactions FROM transactionSessions WHERE session = ?)";
         
         try (Connection conn = connect();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -903,15 +944,20 @@ public class DatabaseCommunication {
 	}
 
 	public static void main(String[] args) {
-		DatabaseCommunication d = new DatabaseCommunication();
-	    d.generateTables();
-		DatabaseCommunication.addTransaction(new Transaction(4, "now", 12.5, "NL55RABO0258025899", "deposit", "food"));
-        DatabaseCommunication.addTransaction(new Transaction(5, "now + 1", 12, "NL55RABO0258025899", "deposit", "weapons"));
-        DatabaseCommunication.addTransaction(new Transaction(6, "now + 12", 1222, "NL99INGB0258025802", "deposit", "spotify premium"));
-        DatabaseCommunication.addCategory(new Category(1, "description"));
-		DatabaseCommunication.addCategoryRule(new CategoryRule(1, "", "NL99INGB0258025802", "deposit", 1));
-        DatabaseCommunication.addCategoryRule(new CategoryRule(3, "", "NL55RABO0258025899", "deposit", 2));
-	    DatabaseCommunication.addTransaction(new Transaction(1, "yesterday", 15, "NL99INGB0258025802", "deposit", ""));
-	    DatabaseCommunication.addCategory(new Category(2, "superman"));
-	}
+//		DatabaseCommunication d = new DatabaseCommunication();
+//	    d.generateTables();
+//		DatabaseCommunication.addTransaction(new Transaction(4, "now", 12.5, "NL55RABO0258025899", "deposit", "food"));
+//        DatabaseCommunication.addTransaction(new Transaction(5, "now + 1", 12, "NL55RABO0258025899", "deposit", "weapons"));
+//        DatabaseCommunication.addTransaction(new Transaction(6, "now + 12", 1222, "NL99INGB0258025802", "deposit", "spotify premium"));
+//        DatabaseCommunication.addCategory(new Category(1, "description"));
+//		DatabaseCommunication.addCategoryRule(new CategoryRule(1, "", "NL99INGB0258025802", "deposit", 1));
+//        DatabaseCommunication.addCategoryRule(new CategoryRule(3, "", "NL55RABO0258025899", "deposit", 2));
+//	    DatabaseCommunication.addTransaction(new Transaction(1, "yesterday", 15, "NL99INGB0258025802", "deposit", ""));
+//	    DatabaseCommunication.addCategory(new Category(2, "superman"));
+//        int id = DatabaseCommunication.getLastTransactionIndex() + 1;
+//        Transaction t = new Transaction(id, "2018-05-19T15:48.25", 40.1, "NL89INGB0258025802", "deposit", "");
+//        DatabaseCommunication.addTransaction(t);
+//        CategoryRule cr = new CategoryRule(6, "", "NL89INGB0258025802", "deposit", 2);
+//        DatabaseCommunication.addCategoryRule(cr);
+    }
 }

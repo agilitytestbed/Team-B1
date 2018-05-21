@@ -27,13 +27,6 @@ public class Category {
 	}
 	
 	public boolean validCategory() {
-		boolean result = true;
-		
-		
-		if (name == null) {
-			result = false;
-		}
-		
-		return result;
+		return name != null;
 	}
 }

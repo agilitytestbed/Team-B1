@@ -78,25 +78,15 @@ public class Transaction {
 		this.type = type;
 	}
 	
-	public int CategoryID() {
-		if (category != null) {
-			return category.getId();
-		} else {
-			return -1;
-		}
-	}
-	
 	public boolean validTransaction() {
 		
 		// if a value is null
 		if (externalIBAN == null || date == null || type == null) {
 			return false;
 		}
-		
-		
+
 		// if amount is negative or zero
-		if (amount < 1) {
-			System.out.println("Amount value problem");
+		if (amount <= 0) {
 			return false;
 		}
 		
