@@ -2,7 +2,7 @@ package nl.utwente.ing.controller;
 
 import java.util.List;
 
-import nl.utwente.ing.transaction.CategoryRule;
+import nl.utwente.ing.model.*;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
@@ -10,9 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
 
-import nl.utwente.ing.transaction.Category;
-import nl.utwente.ing.transaction.DatabaseCommunication;
-import nl.utwente.ing.transaction.Transaction;
+import nl.utwente.ing.database.DatabaseCommunication;
 
 
 @RestController
@@ -26,7 +24,7 @@ public class Controller {
     }
 
     private boolean checkValidType(String type) {
-        for (Transaction.transactionType search : Transaction.transactionType.values()) {
+        for (TransactionType search : TransactionType.values()) {
             if (search.name().equals(type)) {
                 return true;
             }
@@ -145,7 +143,7 @@ public class Controller {
             throw new InvalidInputException();
         }
 
-        //Add the transaction id to the session
+        //Add the model id to the session
 		DatabaseCommunication.addTransactionId(Integer.parseInt(sessionId), transaction.getId());
 		DatabaseCommunication.addTransaction(transaction);
 
@@ -584,7 +582,7 @@ public class Controller {
         }
 
         if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
-            throw new SessionIDException();
+	        throw new SessionIDException();
         }
 
         if (sessionId == null && sessionIDHeader == null) {
@@ -701,13 +699,60 @@ public class Controller {
 	    return new ResponseEntity(HttpStatus.NO_CONTENT);
     }
 
+    //----------------- Balance History ----------------
+
+    private boolean checkInterval(String interval) {
+        for (Interval search : Interval.values()) {
+            if (search.name().equals(interval)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    //GET
+    @RequestMapping(value = "/balance/history", method = RequestMethod.GET, produces = "application/json", consumes = "*")
+    public History getBalanceHistory(@RequestParam(value = "interval", required = false, defaultValue = "month") String interval,
+                                     @RequestParam(value = "intervals", required = false, defaultValue = "24") String intervals,
+                                     @RequestParam(value = "session_id", required = false) String sessionId,
+                                     @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader) {
+
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
+
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        if (!checkInterval(interval)) {
+            throw new InvalidInputException();
+        }
+
+        if (Integer.parseInt(intervals) <= 0 || Integer.parseInt(intervals) > 200) {
+            throw new InvalidInputException();
+        }
+
+        return DatabaseCommunication.getBalanceHistory(Integer.parseInt(sessionId),
+                interval, Integer.parseInt(intervals));
+    }
+
 	// ---------------- Sessions -----------------
 	// POST
 	@RequestMapping(value = "/sessions", method = RequestMethod.POST, produces = "application/json", consumes = "*")
 	public String getSessionId() {
 		// One more than the maximum session Id present.
 		int newSessionId = DatabaseCommunication.getMaxSessionId() + 1;
-		DatabaseCommunication.addSession(newSessionId);
+		DatabaseCommunication.basicSql(newSessionId);
 		return "{\n" +
 				"  \"id\": \"" + newSessionId + "\"\n" +
 				"}";

@@ -1,11 +1,11 @@
-package nl.utwente.ing.transaction;
+package nl.utwente.ing.model;
 
 public class CategoryRule {
 
     private int id;
     private String description = "";
     private String iBan = "";
-    private Transaction.transactionType type = null;
+    private TransactionType type = null;
     private int categoryId;
     private boolean applyOnHistory;
 
@@ -13,7 +13,7 @@ public class CategoryRule {
         this.id = id;
         this.description = description;
         this.iBan = iBAN;
-        this.type = Transaction.transactionType.valueOf(type);
+        this.type = TransactionType.valueOf(type);
         this.categoryId = categoryId;
         this.applyOnHistory = false;
     }
@@ -30,7 +30,7 @@ public class CategoryRule {
         return iBan;
     }
 
-    public Transaction.transactionType getType() {
+    public TransactionType getType() {
         return type;
     }
 
@@ -62,7 +62,7 @@ public class CategoryRule {
         this.id = id;
     }
 
-    public void setType(Transaction.transactionType type) {
+    public void setType(TransactionType type) {
         this.type = type;
     }
 }

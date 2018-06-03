@@ -2,7 +2,7 @@ package nl.utwente.ing;
 
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-import nl.utwente.ing.transaction.DatabaseCommunication;
+import nl.utwente.ing.database.DatabaseCommunication;
 
 import static org.springframework.boot.SpringApplication.*;
 

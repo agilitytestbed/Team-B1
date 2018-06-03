@@ -1,5 +1,6 @@
-package nl.utwente.ing.transaction;
+package nl.utwente.ing.model;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
@@ -8,22 +9,20 @@ public class Transaction {
 	
 	private String externalIBAN;
 	private double amount;
-	private String date;
-	private transactionType type;
+	private LocalDateTime date;
+	private TransactionType type;
 	private Category category = null;
 	private String description;
-	
-	public enum transactionType{
-		deposit, withdrawal
-	}
+	private double balance;
 	
 	public Transaction(int id, String date, double amount, String externalIBAN, String type, String description) {
 		setId(id);
 		setAmount(amount);
-		setDate(date);
-		setType(transactionType.valueOf(type));
+		setDate(LocalDateTime.parse(date));
+		setType(TransactionType.valueOf(type));
 		setExternalIBAN(externalIBAN);
 		this.description = description;
+		this.balance = 0;
 	}
 
 	public int getId() {
@@ -46,11 +45,11 @@ public class Transaction {
 		this.amount = amount;
 	}
 
-	public String getDate() {
+	public LocalDateTime getDate() {
 		return date;
 	}
 
-	public void setDate(String date) {
+	public void setDate(LocalDateTime date) {
 		this.date = date;
 	}
 
@@ -70,15 +69,23 @@ public class Transaction {
 		this.externalIBAN = external_iban;
 	}
 
-	public transactionType getType() {
+	public TransactionType getType() {
 		return type;
 	}
 
-	public void setType(transactionType type) {
+	public void setType(TransactionType type) {
 		this.type = type;
 	}
-	
-	public boolean validTransaction() {
+
+    public double getBalance() {
+        return balance;
+    }
+
+    public void setBalance(double balance) {
+        this.balance = balance;
+    }
+
+    public boolean validTransaction() {
 		
 		// if a value is null
 		if (externalIBAN == null || date == null || type == null) {
@@ -93,7 +100,7 @@ public class Transaction {
 		// if the date is not valid date-time
 		try {
 			DateTimeFormatter timeFormatter = DateTimeFormatter.ISO_DATE_TIME;
-		    timeFormatter.parse(date);
+		    timeFormatter.parse(date.toString());
 		} catch (DateTimeParseException e) {
 			return false;
 		}
