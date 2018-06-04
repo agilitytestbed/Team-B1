@@ -6,13 +6,15 @@ public class History {
     private double high;
     private double low;
     private double volume;
+    private long timestamp;
 
-    public History(double open, double close, double high, double low, double volume) {
+    public History(double open, double close, double high, double low, double volume, long timestamp) {
         this.open = open;
         this.close = close;
         this.high = high;
         this.low = low;
         this.volume = volume;
+        this.timestamp = timestamp;
     }
 
     public double getClose() {
@@ -35,6 +37,10 @@ public class History {
         return volume;
     }
 
+    public long getTimestamp() {
+        return timestamp;
+    }
+
     public void setClose(double close) {
         this.close = close;
     }
@@ -53,5 +59,9 @@ public class History {
 
     public void setVolume(double volume) {
         this.volume = volume;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
     }
 }

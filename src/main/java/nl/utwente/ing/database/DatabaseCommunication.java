@@ -9,6 +9,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 
 
@@ -828,16 +829,22 @@ public class DatabaseCommunication {
 	    List<Transaction> transactions = new ArrayList<>();
         String limit = "";
         LocalDateTime date = LocalDateTime.now();
+        long timestamp = 0;
         if (interval.equals(Interval.day.toString())) {
             limit = date.minusDays(intervals).toString();
+            timestamp = date.minusDays(intervals).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000;
         } else if (interval.equals(Interval.hour.toString())) {
             limit = date.minusHours(intervals).toString();
+            timestamp = date.minusHours(intervals).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000;
         } else if (interval.equals(Interval.week.toString())) {
             limit = date.minusWeeks(intervals).toString();
+            timestamp = date.minusWeeks(intervals).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000;
         } else if (interval.equals(Interval.month.toString())) {
             limit = date.minusMonths(intervals).toString();
+            timestamp = date.minusMonths(intervals).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000;
         } else if (interval.equals(Interval.year.toString())) {
             limit = date.minusYears(intervals).toString();
+            timestamp = date.minusYears(intervals).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000;
         }
 	    String sql = "SELECT * FROM transactions t WHERE t.id IN " +
                 "(SELECT transactions FROM transactionSessions WHERE session = ?) " +
@@ -864,7 +871,7 @@ public class DatabaseCommunication {
 	        	transactions.add(t);
 			}
 			if (transactions.isEmpty()) {
-	            return new History(0, 0, 0, 0, 0);
+	            return new History(0, 0, 0, 0, 0, timestamp);
             }
             double volume = 0;
 	        double low = Double.MAX_VALUE;
@@ -889,9 +896,9 @@ public class DatabaseCommunication {
                 }
                 open = transactionList.get(0).getBalance();
                 close = transactionList.get(transactionList.size() - 1).getBalance();
-                return new History(open, close, high, low, volume);
+                return new History(open, close, high, low, volume, timestamp);
             } else {
-                return new History(0, 0, 0, 0, 0);
+                return new History(0, 0, 0, 0, 0, timestamp);
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -918,5 +925,6 @@ public class DatabaseCommunication {
 //        LocalDateTime date = LocalDateTime.now();
 //        System.out.println(date.minusHours(24));
 //        System.out.println(DatabaseCommunication.getBalanceHistory(1, "day", 10));
+        System.out.println(DatabaseCommunication.getBalanceHistory(1, "month", 1).getTimestamp());
     }
 }
