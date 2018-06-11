@@ -906,6 +906,76 @@ public class DatabaseCommunication {
         return null;
     }
 
+    public static boolean checkFirstDayOfMOnth() {
+	    return Calendar.DAY_OF_MONTH == 1;
+    }
+
+    public static List<SavingGoal> getSavingGoals(int sessionID) {
+	    String sql = "SELECT * FROM SavingGoals WHERE id IN " +
+                "(SELECT saving FROM savingSession WHERE session = ?);";
+	    List<SavingGoal> savingGoalList = new ArrayList<>();
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        pstmt.setInt(1, sessionID);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        while (resultSet.next()) {
+                int id = resultSet.getInt("id");
+                String name = resultSet.getString("name");
+                double goal = resultSet.getDouble("goal");
+                double savePerMonth = resultSet.getDouble("savePerMOnth");
+                double minBalanceRequired = resultSet.getDouble("minBalanceRequired");
+                double balance = resultSet.getDouble("balance");
+                SavingGoal savingGoal = new SavingGoal(id, name, goal, savePerMonth, minBalanceRequired, balance);
+                savingGoalList.add(savingGoal);
+            }
+            return savingGoalList;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static void addSavingGoal(SavingGoal savingGoal) {
+	    String sql = "INSERT INTO SavingGoals VALUES (?, ?, ?, ?, ?, ?);";
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        pstmt.setInt(1, savingGoal.getId());
+	        pstmt.setString(2, savingGoal.getName());
+	        pstmt.setDouble(3, savingGoal.getGoal());
+	        pstmt.setDouble(4, savingGoal.getSavePerMonth());
+	        pstmt.setDouble(5, savingGoal.getMinBalanceRequired());
+	        pstmt.setDouble(6, savingGoal.getBalance());
+	        pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void deleteSavingGoal(int id, int sessionID) {
+	    String sql = "DELETE FROM SavingGoals WHERE id IN " +
+                "(SELECT saving FROM savingSession WHERE sessionID = ?) AND id = ?;";
+	    basicSql(sql, sessionID, id);
+    }
+
+    public static int getLastSavingsID() {
+        String sql = "SELECT s.id FROM SavingGoals as s WHERE NOT EXISTS " +
+                "(SELECT * FROM SavingGoals WHERE id = s.id + 1);";
+        return getLastIndex(sql);
+    }
+
+    public static boolean checkValidSavingGoal(int id) {
+	    String sql = "SELECT * FROM SavingGoal WHERE id = ?;";
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        pstmt.setInt(1, id);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        return resultSet.next();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
 	public static void main(String[] args) {
 //		DatabaseCommunication d = new DatabaseCommunication();
 //	    d.generateTables();
@@ -925,6 +995,7 @@ public class DatabaseCommunication {
 //        LocalDateTime date = LocalDateTime.now();
 //        System.out.println(date.minusHours(24));
 //        System.out.println(DatabaseCommunication.getBalanceHistory(1, "day", 10));
-        System.out.println(DatabaseCommunication.getBalanceHistory(1, "month", 1).getTimestamp());
+//        System.out.println(DatabaseCommunication.getBalanceHistory(1, "month", 1).getTimestamp());
+        System.out.println(DatabaseCommunication.checkFirstDayOfMOnth());
     }
 }

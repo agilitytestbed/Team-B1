@@ -746,6 +746,106 @@ public class Controller {
                 interval, Integer.parseInt(intervals));
     }
 
+    //----------------- Saving Goals -------------
+
+    public boolean correctJsonSavingGoal(JSONObject jsonObject) {
+        return jsonObject.has("id") && jsonObject.has("name") && jsonObject.has("goal") &&
+                jsonObject.has("savePerMonth") && jsonObject.has("minBalanceRequired") && jsonObject.has("balance");
+    }
+
+    //GET
+    @RequestMapping(value = "/savingGoals", method = RequestMethod.GET, produces = "application/json", consumes = "*")
+    public List<SavingGoal> getSavingGoals(@RequestHeader("X-session-ID") String sessionIDHeader,
+                                           @RequestParam("session_id") String sessionId) {
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
+
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        return DatabaseCommunication.getSavingGoals(Integer.parseInt(sessionId));
+    }
+
+    //POST
+    @RequestMapping(value = "/savingGoals", method = RequestMethod.POST, produces = "application/json", consumes = "*")
+    public ResponseEntity<SavingGoal> addSavingGoal(@RequestParam("session_id") String sessionId,
+                                                    @RequestHeader("X-session-ID") String sessionIDHeader,
+                                                    @RequestBody String saving) {
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
+
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        JSONObject jsonObject = new JSONObject(saving);
+        if (!correctJsonSavingGoal(jsonObject)) {
+            throw new InvalidInputException();
+        }
+        int id = DatabaseCommunication.getLastSavingsID() + 1;
+        String name = jsonObject.getString("name");
+        double balance = jsonObject.getDouble("balance");
+        double goal = jsonObject.getDouble("goal");
+        double savePerMonth = jsonObject.getDouble("savePerMonth");
+        double minBalanceRequired = jsonObject.getDouble("minBalanceRequired");
+        SavingGoal savingGoal = new SavingGoal(id, name, goal, savePerMonth, minBalanceRequired, balance);
+        if (!savingGoal.validSavingGoal()) {
+            throw new InvalidInputException();
+        }
+        DatabaseCommunication.addSavingGoal(savingGoal);
+        return new ResponseEntity<>(savingGoal, HttpStatus.CREATED);
+    }
+
+    //DELETE
+    @RequestMapping(value = "/savingGoals/{savingGoalId}", method = RequestMethod.DELETE, produces = "application/json", consumes = "*")
+    public ResponseEntity deleteSavingGoal(@RequestHeader("X-session-ID") String sessionIDHeader,
+                                           @RequestParam("session_id") String sessionId,
+                                           @PathVariable("savingGoalId") int savingGoal) {
+        if (sessionId == null && sessionIDHeader != null) {
+            sessionId = sessionIDHeader;
+        }
+
+        if (sessionId != sessionIDHeader && sessionId != null && sessionIDHeader != null) {
+            throw new SessionIDException();
+        }
+
+        if (sessionId == null && sessionIDHeader == null) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.validSessionId(Integer.parseInt(sessionId)) ||
+                !DatabaseCommunication.validSessionId(Integer.parseInt(sessionId))) {
+            throw new SessionIDException();
+        }
+
+        if (!DatabaseCommunication.checkValidSavingGoal(savingGoal)) {
+            throw new ItemNotFound();
+        }
+        DatabaseCommunication.deleteSavingGoal(savingGoal, Integer.parseInt(sessionId));
+        return new ResponseEntity(HttpStatus.NO_CONTENT);
+    }
+
 	// ---------------- Sessions -----------------
 	// POST
 	@RequestMapping(value = "/sessions", method = RequestMethod.POST, produces = "application/json", consumes = "*")
