@@ -9,13 +9,13 @@ public class SavingGoal {
     private double minBalanceRequired;
     private double balance;
 
-    public SavingGoal(int id, String name, double goal, double savePerMonth, double minBalanceRequired, double balance) {
+    public SavingGoal(int id, String name, double goal, double savePerMonth, double minBalanceRequired) {
         this.id = id;
         this.name = name;
         this.goal = goal;
         this.savePerMonth = savePerMonth;
         this.minBalanceRequired = minBalanceRequired;
-        this.balance = balance;
+        this.balance = 0;
     }
 
     public double getBalance() {

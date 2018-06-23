@@ -73,7 +73,8 @@ public class DatabaseCommunication {
                 "externalIBAN text NOT NULL," +
                 "type text NOT NULL," +
 				"description text," +
-                "categoryID integer" +
+                "categoryID integer," +
+                "balance real" +
                 ")";
         executeSQL(sql);
 
@@ -95,6 +96,21 @@ public class DatabaseCommunication {
                 ")";
         executeSQL(sql);
 
+        sql = "CREATE TABLE IF NOT EXISTS savingGoals (" +
+                "id integer PRIMARY KEY," +
+                "name text NOT NULL," +
+                "goal real NOT NULL," +
+                "savePerMonth real NOT NULL," +
+                "minBalanceRequired real DEFAULT 0," +
+                "balance real NOT NULL" +
+                ");";
+        executeSQL(sql);
+
+        sql = "CREATE TABLE IF NOT EXISTS savingGoalSessions (" +
+                "session integer NOT NULL," +
+                "goal_id integer" +
+                ")";
+        executeSQL(sql);
     }
 
 	/*
@@ -122,6 +138,14 @@ public class DatabaseCommunication {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
+        }
+    }
+
+    public static void addGoalId(int sessionID, int id) {
+	    String sql = "SELECT * FROM savingGoalSessions WHERE session = ? AND goal_id = ?;";
+	    if (executeSql(sql, sessionID, id)) {
+	        sql = "INSERT INTO savingGoalSessions VALUES (?, ?);";
+	        basicSql(sql, sessionID, id);
         }
     }
 
@@ -202,6 +226,16 @@ public class DatabaseCommunication {
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
+
+        //Add savingGoal session
+        sql = "INSERT INTO savingGoalSessions(session) VALUES(?)";
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, sessionID);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     /**
@@ -231,7 +265,7 @@ public class DatabaseCommunication {
      */
 	public static boolean validSessionId(int sessionID) {
 		String sql = "SELECT * FROM transactionSessions " +
-                    "WHERE session == ?;";
+                    "WHERE session = ?;";
 		try (Connection conn = connect();
 			 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 			pstmt.setInt(1, sessionID);
@@ -273,16 +307,22 @@ public class DatabaseCommunication {
         basicSql(sql, sessionID, id);
     }
 
+    public static void deleteSavingGoalId(int id, int sessionID) {
+	    String sql = "DELETE FROM savingGoalSessions WHERE session = ? AND goal_id = ?;";
+	    basicSql(sql, sessionID, id);
+    }
+
     /**
      * Gets a list with all transactions.
      * @return List with transactions.
      */
-    public static List<Transaction> getTransactions() {
+    public static List<Transaction> getTransactions(int sessionID) {
 	    List<Transaction> t = new ArrayList<>();
-	    String sql = "SELECT * FROM transactions;";
+	    String sql = "SELECT * FROM transactions WHERE id IN " +
+                "(SELECT transactions FROM transactionSessions WHERE session = ?);";
 	    try (Connection conn = connect();
                     PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
+            pstmt.setInt(1, sessionID);
 	        ResultSet result = pstmt.executeQuery();
 	        Map<Integer, String> c = getCategories();
 	        while(result.next()) {
@@ -409,7 +449,7 @@ public class DatabaseCommunication {
 	 * 			Transaction object from the database
 	 */
 	public static Transaction getTransaction(int id, int sessionID) {
-		String sql = "SELECT * FROM transactions WHERE id == ? AND id IN " +
+		String sql = "SELECT * FROM transactions WHERE id = ? AND id IN " +
                 "(SELECT transactions FROM transactionSessions WHERE session = ?)";
 		try (Connection conn = connect();
 	             PreparedStatement pstmt  = conn.prepareStatement(sql)) {
@@ -469,6 +509,7 @@ public class DatabaseCommunication {
 	        while (rs.next()) {
 	        	t = new Transaction(rs.getInt("id"), rs.getString("date"), rs.getDouble("amount"), rs.getString("externalIBAN"), rs.getString("type"), rs.getString("description"));
 	        	t.setCategory(new Category(rs.getInt("categoryID"), c.get(rs.getInt("categoryID"))));
+	        	t.setBalance(rs.getDouble("balance"));
 	            transactions.add(t);
 	        }
 	        return transactions;
@@ -521,7 +562,7 @@ public class DatabaseCommunication {
 	 * @param t
 	 * 			Transaction object
 	 */
-	public static void addTransaction(Transaction t) {
+	public static void addTransaction(Transaction t, int sessionID) {
 		String sql = "INSERT INTO transactions(id, date, amount, externalIBAN, type, description) VALUES(?,?,?,?,?,?)";
 		try (Connection conn = connect();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -536,7 +577,7 @@ public class DatabaseCommunication {
             System.out.println(e.getMessage());
         }
 
-        List<CategoryRule> cr = getCategoryRules();
+        List<CategoryRule> cr = getAllCategoryRules(sessionID);
 		Map<Integer, String> c = getCategories();
 		for (CategoryRule search : cr) {
 		    if ((search.getDescription().equals(t.getDescription()) || search.getDescription().isEmpty()) &&
@@ -551,12 +592,64 @@ public class DatabaseCommunication {
         }
     }
 
+    private static void updateBalance(String sql, double balance, int id) {
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setDouble(1, balance);
+            pstmt.setInt(2, id);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void updateBalance(int sessionID) {
+	    String sql = "SELECT * FROM transactions WHERE id IN " +
+                "(SELECT transactions FROM transactionSessions WHERE session = ?) " +
+                "ORDER BY date;";
+	    List<Transaction> transactions = new ArrayList<>();
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        pstmt.setInt(1, sessionID);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        double balance = 0;
+	        while (resultSet.next()) {
+                int id = resultSet.getInt(1);
+                String date = resultSet.getString(2);
+                double amount = resultSet.getDouble(3);
+                String externalIBAN = resultSet.getString(4);
+                String type = resultSet.getString(5);
+                String description = resultSet.getString(6);
+                Transaction t = new Transaction(id, date, amount, externalIBAN, type, description);
+                t.setBalance(resultSet.getDouble("balance"));
+                if (t.getBalance() != 0) {
+                    balance = t.getBalance();
+                    transactions.add(t);
+                } else {
+                    if (t.getType().equals(TransactionType.deposit)) {
+                        balance += t.getAmount();
+                    } else {
+                        balance -= t.getAmount();
+                    }
+                    t.setBalance(balance);
+                    transactions.add(t);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        for (Transaction search : transactions) {
+	        sql = "UPDATE transactions SET balance = ? WHERE id = ?;";
+	        updateBalance(sql, search.getBalance(), search.getId());
+        }
+    }
+
     /**
      * Adds a categoryRule object to the database.
      * Also it searches for a model for which it can set the categoryID.
      * @param cr CategoryRule object.
      */
-    public static void addCategoryRule(CategoryRule cr) {
+    public static void addCategoryRule(CategoryRule cr, int sessionID) {
         String sql = "INSERT INTO categoryRules VALUES(?, ?, ?, ?, ?, ?)";
         try (Connection conn = connect();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -572,7 +665,7 @@ public class DatabaseCommunication {
             e.printStackTrace();
         }
 
-        List<Transaction> t = getTransactions();
+        List<Transaction> t = getTransactions(sessionID);
         Map<Integer, String> c = getCategories();
         for (Transaction search : t) {
             if ((search.getExternalIBAN().equals(cr.getiBan()) || cr.getiBan().isEmpty()) &&
@@ -676,8 +769,9 @@ public class DatabaseCommunication {
 		String sql = "UPDATE transactions SET date = ? , "
                 + "amount = ? , "
                 + "externalIBAN = ? , "
-                + "type = ? ,"
-				+ "description = ?"
+                + "type = ? , "
+				+ "description = ? , "
+                + "balance = ? "
                 + "WHERE id = ? AND id IN "
                 + "(SELECT transactions FROM transactionSessions WHERE session = ?)";
         try (Connection conn = connect();
@@ -688,8 +782,9 @@ public class DatabaseCommunication {
             pstmt.setString(3, t.getExternalIBAN());
             pstmt.setString(4, t.getType().toString());
             pstmt.setString(5, t.getDescription());
-            pstmt.setInt(6, id);
-            pstmt.setInt(7, sessionId);
+            pstmt.setDouble(6, t.getBalance());
+            pstmt.setInt(7, id);
+            pstmt.setInt(8, sessionId);
             // update 
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -774,7 +869,7 @@ public class DatabaseCommunication {
 	 * 			Category object from the database
 	 */
 	public static Category getCategory(int id, int sessionId) {
-		String sql = "SELECT * FROM categories WHERE id == ? AND id IN " +
+		String sql = "SELECT * FROM categories WHERE id = ? AND id IN " +
                 "(SELECT categories FROM categorySessions WHERE session = ?)";
 		try (Connection conn = connect(); PreparedStatement pstmt  = conn.prepareStatement(sql)) {
 		    pstmt.setInt(1, id);
@@ -906,13 +1001,9 @@ public class DatabaseCommunication {
         return null;
     }
 
-    public static boolean checkFirstDayOfMOnth() {
-	    return Calendar.DAY_OF_MONTH == 1;
-    }
-
     public static List<SavingGoal> getSavingGoals(int sessionID) {
 	    String sql = "SELECT * FROM SavingGoals WHERE id IN " +
-                "(SELECT saving FROM savingSession WHERE session = ?);";
+                "(SELECT goal_id FROM savingGoalSessions WHERE session = ?);";
 	    List<SavingGoal> savingGoalList = new ArrayList<>();
 	    try (Connection conn = connect();
             PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -925,7 +1016,8 @@ public class DatabaseCommunication {
                 double savePerMonth = resultSet.getDouble("savePerMOnth");
                 double minBalanceRequired = resultSet.getDouble("minBalanceRequired");
                 double balance = resultSet.getDouble("balance");
-                SavingGoal savingGoal = new SavingGoal(id, name, goal, savePerMonth, minBalanceRequired, balance);
+                SavingGoal savingGoal = new SavingGoal(id, name, goal, savePerMonth, minBalanceRequired);
+                savingGoal.setBalance(balance);
                 savingGoalList.add(savingGoal);
             }
             return savingGoalList;
@@ -952,8 +1044,39 @@ public class DatabaseCommunication {
     }
 
     public static void deleteSavingGoal(int id, int sessionID) {
-	    String sql = "DELETE FROM SavingGoals WHERE id IN " +
-                "(SELECT saving FROM savingSession WHERE sessionID = ?) AND id = ?;";
+	    String sql = "select t.id, t.balance from transactions t, transactionSessions ts where t.id = ts.transactions and ts.session = 1 order by date desc limit 0, 1;";
+	    int transactionId = 0;
+	    double balance = 0;
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        ResultSet resultSet = pstmt.executeQuery();
+	        if (resultSet.next()) {
+	            transactionId = resultSet.getInt(1);
+	            balance = resultSet.getDouble(2);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        sql = "SELECT balance FROM savingGoals WHERE id = ? AND " +
+                "(SELECT goal_id FROM savingGoalSessions WHERE session = ?)";
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        pstmt.setInt(1, id);
+	        pstmt.setInt(2, sessionID);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        if (resultSet.next()) {
+	            balance += resultSet.getDouble(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        sql = "UPDATE transactions SET balance = ? WHERE id = ?;";
+	    updateBalance(sql, balance, transactionId);
+
+        sql = "DELETE FROM SavingGoals WHERE id IN " +
+                "(SELECT goal_id FROM savingGoalSessions WHERE session = ?) AND id = ?;";
 	    basicSql(sql, sessionID, id);
     }
 
@@ -964,7 +1087,7 @@ public class DatabaseCommunication {
     }
 
     public static boolean checkValidSavingGoal(int id) {
-	    String sql = "SELECT * FROM SavingGoal WHERE id = ?;";
+	    String sql = "SELECT * FROM SavingGoals WHERE id = ?;";
 	    try (Connection conn = connect();
             PreparedStatement pstmt = conn.prepareStatement(sql)) {
 	        pstmt.setInt(1, id);
@@ -976,19 +1099,77 @@ public class DatabaseCommunication {
         return false;
     }
 
+    public static void updateSavingGoal(SavingGoal sg) {
+	    String sql = "UPDATE SavingGoals SET balance = ? WHERE id = ?;";
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        pstmt.setDouble(1, sg.getBalance());
+	        pstmt.setInt(2, sg.getId());
+	        pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void updateSavingGoals(int sessionID) {
+	    String sql = "SELECT * FROM transactions WHERE id IN " +
+                "(SELECT transactions FROM transactionSessions WHERE session = ?) " +
+                "ORDER BY date DESC LIMIT 0, 2;";
+	    List<Transaction> transactions = new ArrayList<>();
+	    try (Connection conn = connect();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        pstmt.setInt(1, sessionID);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        while (resultSet.next()) {
+	            int id = resultSet.getInt(1);
+	            String date = resultSet.getString(2);
+	            double amount = resultSet.getDouble(3);
+	            String type = resultSet.getString(5);
+	            String externalIBAN = resultSet.getString(4);
+	            String description = resultSet.getString(6);
+	            double balance = resultSet.getDouble(8);
+	            Transaction t = new Transaction(id, date, amount, externalIBAN, type, description);
+	            t.setBalance(balance);
+	            transactions.add(t);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        if (transactions.size() > 1) {
+            int year1 = transactions.get(0).getDate().getYear();
+            int year2 = transactions.get(1).getDate().getYear();
+            int month1 = transactions.get(0).getDate().getMonthValue();
+            int month2 = transactions.get(1).getDate().getMonthValue();
+            int timeDifference = month1 - month2 + 12 * (year1 - year2);
+            List<SavingGoal> savingGoals = getSavingGoals(sessionID);
+            Transaction t = transactions.get(0);
+            for (SavingGoal search : savingGoals) {
+                int i = 0;
+                while (t.getBalance() >= search.getMinBalanceRequired() && i < timeDifference
+                        && search.getBalance() < search.getGoal()) {
+                    search.setBalance(search.getBalance() + search.getSavePerMonth());
+                    t.setBalance(t.getBalance() - search.getSavePerMonth());
+                    i++;
+                }
+                updateSavingGoal(search);
+                updateTransaction(t, t.getId(), sessionID);
+            }
+        }
+    }
+
 	public static void main(String[] args) {
 //		DatabaseCommunication d = new DatabaseCommunication();
 //	    d.generateTables();
-//		DatabaseCommunication.addTransaction(new Transaction(4, "now", 12.5, "NL55RABO0258025899", "deposit", "food"));
-//        DatabaseCommunication.addTransaction(new Transaction(5, "now + 1", 12, "NL55RABO0258025899", "deposit", "weapons"));
-//        DatabaseCommunication.addTransaction(new Transaction(6, "now + 12", 1222, "NL99INGB0258025802", "deposit", "spotify premium"));
+//		DatabaseCommunication.addTransaction(new Transaction(1, "2018-06-19T15:15:48.25", 12.5, "NL55RABO0258025899", "deposit", "food"));
+//        DatabaseCommunication.addTransaction(new Transaction(2, "2018-05-19T18:15:48.25", 12, "NL55RABO0258025899", "deposit", "weapons"));
+//        DatabaseCommunication.addTransaction(new Transaction(3, "2018-02-19T04:15:48.25", 1222, "NL99INGB0258025802", "deposit", "spotify premium"));
 //        DatabaseCommunication.addCategory(new Category(1, "description"));
 //		DatabaseCommunication.addCategoryRule(new CategoryRule(1, "", "NL99INGB0258025802", "deposit", 1));
 //        DatabaseCommunication.addCategoryRule(new CategoryRule(3, "", "NL55RABO0258025899", "deposit", 2));
-//	    DatabaseCommunication.addTransaction(new Transaction(1, "yesterday", 15, "NL99INGB0258025802", "deposit", ""));
+//	    DatabaseCommunication.addTransaction(new Transaction(4, "2018-01-19T15:15:48.25", 15, "NL99INGB0258025802", "deposit", ""));
 //	    DatabaseCommunication.addCategory(new Category(2, "superman"));
 //        int id = DatabaseCommunication.getLastTransactionIndex() + 1;
-//        Transaction t = new Transaction(id, "2018-05-19T15:48.25", 40.1, "NL89INGB0258025802", "deposit", "");
+//        Transaction t = new Transaction(id, "2018-05-18T01:15:48.25", 40.1, "NL89INGB0258025802", "deposit", "");
 //        DatabaseCommunication.addTransaction(t);
 //        CategoryRule cr = new CategoryRule(6, "", "NL89INGB0258025802", "deposit", 2);
 //        DatabaseCommunication.addCategoryRule(cr);
@@ -996,6 +1177,9 @@ public class DatabaseCommunication {
 //        System.out.println(date.minusHours(24));
 //        System.out.println(DatabaseCommunication.getBalanceHistory(1, "day", 10));
 //        System.out.println(DatabaseCommunication.getBalanceHistory(1, "month", 1).getTimestamp());
-        System.out.println(DatabaseCommunication.checkFirstDayOfMOnth());
+//        System.out.println(LocalDateTime.now());
+//        DatabaseCommunication.updateBalance(1);
+//        DatabaseCommunication.deleteSavingGoal(1, 1);
+//        System.out.println(LocalDateTime.now().getDayOfMonth());
     }
 }

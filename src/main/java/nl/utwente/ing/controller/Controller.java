@@ -145,8 +145,9 @@ public class Controller {
 
         //Add the model id to the session
 		DatabaseCommunication.addTransactionId(Integer.parseInt(sessionId), transaction.getId());
-		DatabaseCommunication.addTransaction(transaction);
-
+		DatabaseCommunication.addTransaction(transaction, Integer.parseInt(sessionId));
+		DatabaseCommunication.updateBalance(Integer.parseInt(sessionId));
+        DatabaseCommunication.updateSavingGoals(Integer.parseInt(sessionId));
 		// Create a response add the created object to it
 		return new ResponseEntity<>(t, HttpStatus.CREATED);
 	}
@@ -224,7 +225,9 @@ public class Controller {
 
         Transaction transaction = new Transaction(id, jsonTransaction.getString("date"), jsonTransaction.getDouble("amount"),
                 jsonTransaction.getString("externalIBAN"), jsonTransaction.getString("type"), jsonTransaction.getString("description"));
-
+        if (jsonTransaction.has("balance")) {
+            transaction.setBalance(jsonTransaction.getDouble("balance"));
+        }
         if (!transaction.validTransaction()) {
             throw new InvalidInputException();
         }
@@ -234,6 +237,7 @@ public class Controller {
         }
 
 		DatabaseCommunication.updateTransaction(transaction ,id, Integer.parseInt(sessionId));
+        DatabaseCommunication.updateBalance(Integer.parseInt(sessionId));
 
 		return new ResponseEntity<>(DatabaseCommunication.getTransaction(id, Integer.parseInt(sessionId)), HttpStatus.OK);
 	}
@@ -612,7 +616,7 @@ public class Controller {
         CategoryRule cr = new CategoryRule(newID, description, IBAN, type, categoryId);
 
 	    DatabaseCommunication.addCategoryRulesId(Integer.parseInt(sessionId), newID);
-	    DatabaseCommunication.addCategoryRule(cr);
+	    DatabaseCommunication.addCategoryRule(cr, Integer.parseInt(sessionId));
 
         return new ResponseEntity<>(cr, HttpStatus.CREATED);
     }
@@ -749,14 +753,14 @@ public class Controller {
     //----------------- Saving Goals -------------
 
     public boolean correctJsonSavingGoal(JSONObject jsonObject) {
-        return jsonObject.has("id") && jsonObject.has("name") && jsonObject.has("goal") &&
-                jsonObject.has("savePerMonth") && jsonObject.has("minBalanceRequired") && jsonObject.has("balance");
+        return jsonObject.has("name") && jsonObject.has("goal") &&
+                jsonObject.has("savePerMonth");
     }
 
     //GET
     @RequestMapping(value = "/savingGoals", method = RequestMethod.GET, produces = "application/json", consumes = "*")
-    public List<SavingGoal> getSavingGoals(@RequestHeader("X-session-ID") String sessionIDHeader,
-                                           @RequestParam("session_id") String sessionId) {
+    public List<SavingGoal> getSavingGoals(@RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
+                                           @RequestParam(value = "session_id", required = false) String sessionId) {
         if (sessionId == null && sessionIDHeader != null) {
             sessionId = sessionIDHeader;
         }
@@ -779,9 +783,13 @@ public class Controller {
 
     //POST
     @RequestMapping(value = "/savingGoals", method = RequestMethod.POST, produces = "application/json", consumes = "*")
-    public ResponseEntity<SavingGoal> addSavingGoal(@RequestParam("session_id") String sessionId,
-                                                    @RequestHeader("X-session-ID") String sessionIDHeader,
+    public ResponseEntity<SavingGoal> addSavingGoal(@RequestParam(value = "session_id", required = false) String sessionId,
+                                                    @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
                                                     @RequestBody String saving) {
+        if (saving.isEmpty()) {
+            throw new InvalidInputException();
+        }
+
         if (sessionId == null && sessionIDHeader != null) {
             sessionId = sessionIDHeader;
         }
@@ -803,24 +811,27 @@ public class Controller {
         if (!correctJsonSavingGoal(jsonObject)) {
             throw new InvalidInputException();
         }
+        if (!jsonObject.has("minBalanceRequired")) {
+            jsonObject.put("minBalanceRequired", 0);
+        }
         int id = DatabaseCommunication.getLastSavingsID() + 1;
         String name = jsonObject.getString("name");
-        double balance = jsonObject.getDouble("balance");
         double goal = jsonObject.getDouble("goal");
         double savePerMonth = jsonObject.getDouble("savePerMonth");
         double minBalanceRequired = jsonObject.getDouble("minBalanceRequired");
-        SavingGoal savingGoal = new SavingGoal(id, name, goal, savePerMonth, minBalanceRequired, balance);
+        SavingGoal savingGoal = new SavingGoal(id, name, goal, savePerMonth, minBalanceRequired);
         if (!savingGoal.validSavingGoal()) {
             throw new InvalidInputException();
         }
+        DatabaseCommunication.addGoalId(Integer.parseInt(sessionId), id);
         DatabaseCommunication.addSavingGoal(savingGoal);
         return new ResponseEntity<>(savingGoal, HttpStatus.CREATED);
     }
 
     //DELETE
     @RequestMapping(value = "/savingGoals/{savingGoalId}", method = RequestMethod.DELETE, produces = "application/json", consumes = "*")
-    public ResponseEntity deleteSavingGoal(@RequestHeader("X-session-ID") String sessionIDHeader,
-                                           @RequestParam("session_id") String sessionId,
+    public ResponseEntity deleteSavingGoal(@RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
+                                           @RequestParam(value = "session_id", required = false) String sessionId,
                                            @PathVariable("savingGoalId") int savingGoal) {
         if (sessionId == null && sessionIDHeader != null) {
             sessionId = sessionIDHeader;
@@ -843,6 +854,7 @@ public class Controller {
             throw new ItemNotFound();
         }
         DatabaseCommunication.deleteSavingGoal(savingGoal, Integer.parseInt(sessionId));
+        DatabaseCommunication.deleteSavingGoalId(savingGoal, Integer.parseInt(sessionId));
         return new ResponseEntity(HttpStatus.NO_CONTENT);
     }
 
