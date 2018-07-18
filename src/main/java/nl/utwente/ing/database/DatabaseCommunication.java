@@ -1138,7 +1138,7 @@ public class DatabaseCommunication {
 	            Transaction t = new Transaction(id, date, amount, externalIBAN, type, description);
 	            t.setBalance(balance);
 	            transactions.add(t);
-            }
+	        }
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -1309,30 +1309,7 @@ public class DatabaseCommunication {
     }
 
 	public static void main(String[] args) {
-//		DatabaseCommunication d = new DatabaseCommunication();
-//	    d.generateTables();
-//        DatabaseCommunication.updatePaymentRequest(new Transaction(1, "2018-06-19T15:15:48.25", 100.52, "NL55RABO0258025899", "deposit", "food"), 1);
-//        System.out.println(DatabaseCommunication.getLastPaymentRequestsId());
-//		DatabaseCommunication.addTransaction(new Transaction(1, "2018-06-19T15:15:48.25", 12.5, "NL55RABO0258025899", "deposit", "food"));
-//        DatabaseCommunication.addTransaction(new Transaction(2, "2018-05-19T18:15:48.25", 12, "NL55RABO0258025899", "deposit", "weapons"));
-//        DatabaseCommunication.addTransaction(new Transaction(3, "2018-02-19T04:15:48.25", 1222, "NL99INGB0258025802", "deposit", "spotify premium"));
-//        DatabaseCommunication.addCategory(new Category(1, "description"));
-//		DatabaseCommunication.addCategoryRule(new CategoryRule(1, "", "NL99INGB0258025802", "deposit", 1));
-//        DatabaseCommunication.addCategoryRule(new CategoryRule(3, "", "NL55RABO0258025899", "deposit", 2));
-//	    DatabaseCommunication.addTransaction(new Transaction(4, "2018-01-19T15:15:48.25", 15, "NL99INGB0258025802", "deposit", ""));
-//	    DatabaseCommunication.addCategory(new Category(2, "superman"));
-//        int id = DatabaseCommunication.getLastTransactionIndex() + 1;
-//        Transaction t = new Transaction(id, "2018-05-18T01:15:48.25", 40.1, "NL89INGB0258025802", "deposit", "");
-//        DatabaseCommunication.addTransaction(t);
-//        CategoryRule cr = new CategoryRule(6, "", "NL89INGB0258025802", "deposit", 2);
-//        DatabaseCommunication.addCategoryRule(cr);
-//        LocalDateTime date = LocalDateTime.now();
-//        System.out.println(date.minusHours(24));
-//        System.out.println(DatabaseCommunication.getBalanceHistory(1, "day", 10));
-//        System.out.println(DatabaseCommunication.getBalanceHistory(1, "month", 1).getTimestamp());
-//        System.out.println(LocalDateTime.now());
-//        DatabaseCommunication.updateBalance(1);
-//        DatabaseCommunication.deleteSavingGoal(1, 1);
-//        DatabaseCommunication.getPaymentRequests(1);
+//        DatabaseCommunication.updateBalance(5);
+        DatabaseCommunication.updateSavingGoals(5);
     }
 }

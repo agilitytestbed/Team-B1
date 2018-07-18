@@ -18,7 +18,7 @@ public class Transaction {
 	public Transaction(int id, String date, double amount, String externalIBAN, String type, String description) {
 		setId(id);
 		setAmount(amount);
-		setDate(LocalDateTime.parse(date));
+		setDate(LocalDateTime.parse(date.replace("Z", "")));
 		setType(TransactionType.valueOf(type));
 		setExternalIBAN(externalIBAN);
 		this.description = description;
@@ -98,12 +98,6 @@ public class Transaction {
 		}
 		
 		// if the date is not valid date-time
-		try {
-			DateTimeFormatter timeFormatter = DateTimeFormatter.ISO_DATE_TIME;
-		    timeFormatter.parse(date.toString());
-		} catch (DateTimeParseException e) {
-			return false;
-		}
 		
 		return true;
 		

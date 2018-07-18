@@ -64,8 +64,8 @@ public class SavingGoalHttpRequest {
     @RequestMapping(value = "/savingGoals", method = RequestMethod.POST, produces = "application/json", consumes = "*")
     public ResponseEntity<SavingGoal> addSavingGoal(@RequestParam(value = "session_id", required = false) String sessionId,
                                                     @RequestHeader(value = "X-session-ID", required = false) String sessionIDHeader,
-                                                    @RequestBody String saving) {
-        if (saving.isEmpty()) {
+                                                    @RequestBody(required = false) String saving) {
+        if (saving == null) {
             throw new InvalidInputException();
         }
 

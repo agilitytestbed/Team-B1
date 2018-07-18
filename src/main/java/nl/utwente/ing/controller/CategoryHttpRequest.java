@@ -2,6 +2,7 @@ package nl.utwente.ing.controller;
 
 import nl.utwente.ing.database.DatabaseCommunication;
 import nl.utwente.ing.model.Category;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -169,7 +170,13 @@ public class CategoryHttpRequest {
             throw new SessionIDException();
         }
 
-        JSONObject jsonCategory = new JSONObject(category);
+        JSONObject jsonCategory;
+
+        try {
+            jsonCategory = new JSONObject(category);
+        } catch (JSONException e) {
+            throw new InvalidInputException();
+        }
 
         if (!jsonCategory.has("name")) {
             throw new InvalidInputException();

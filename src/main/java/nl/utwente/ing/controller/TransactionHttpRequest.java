@@ -10,6 +10,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @RestController
@@ -126,7 +129,16 @@ public class TransactionHttpRequest {
 
         if (!checkValidType(jsonTransaction.getString("type"))) {
             throw new InvalidInputException();
-    }
+        }
+
+        String date = jsonTransaction.getString("date").replace("Z", "");
+
+        try {
+            DateTimeFormatter timeFormatter = DateTimeFormatter.ISO_DATE_TIME;
+            timeFormatter.parse(date);
+        } catch (DateTimeParseException e) {
+            throw new InvalidInputException();
+        }
 
         Transaction transaction = new Transaction(newId, jsonTransaction.getString("date"), jsonTransaction.getDouble("amount"),
                 jsonTransaction.getString("externalIBAN"), jsonTransaction.getString("type"), jsonTransaction.getString("description"));
