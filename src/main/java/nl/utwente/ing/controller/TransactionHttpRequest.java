@@ -10,7 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -152,6 +151,7 @@ public class TransactionHttpRequest {
         DatabaseCommunication.addTransaction(transaction, Integer.parseInt(sessionId));
         DatabaseCommunication.updateBalance(Integer.parseInt(sessionId));
         DatabaseCommunication.updateSavingGoals(Integer.parseInt(sessionId));
+        DatabaseCommunication.checkBalance(Integer.parseInt(sessionId), transaction.getDate().toString());
         // Create a response add the created object to it
         return new ResponseEntity<>(t, HttpStatus.CREATED);
     }

@@ -1,6 +1,7 @@
 package nl.utwente.ing.database;
 
 import nl.utwente.ing.model.*;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -9,7 +10,7 @@ import java.util.*;
 
 
 public class DatabaseCommunication {
-	private static final String FILENAME = "data.db";
+	private static final String FILENAME = "database.db";
 	private static final String URL = "jdbc:sqlite:" + FILENAME;
 
 	/**
@@ -33,11 +34,19 @@ public class DatabaseCommunication {
 	 * 			The sql message as a string
 	 */
 	private static void executeSQL(String sql) {
-		try (Connection conn = connect();
-			 Statement stmt = conn.createStatement()) {
+		Connection conn = connect();
+		try {
+			 Statement stmt = conn.createStatement();
 			stmt.execute(sql);
-		} catch (SQLException e) {
+        } catch (SQLException e) {
 			System.out.println(e.getMessage());
+		} finally {
+			if (conn != null) {
+				try {
+					conn.close();
+				} catch (SQLException e) {
+				}
+			}
 		}
 	}
 
@@ -122,7 +131,21 @@ public class DatabaseCommunication {
                 "session integer, " +
                 "id integer" +
                 ")";
+        executeSQL(sql);
 
+        sql = "CREATE TABLE IF NOT EXISTS messages (" +
+                "id integer PRIMARY KEY, " +
+                "message text, " +
+                "date text NOT NULL, " +
+                "read boolean DEFAULT false, " +
+                "type text NOT NULL" +
+                ")";
+        executeSQL(sql);
+
+        sql = "CREATE TABLE IF NOT EXISTS messageSessions (" +
+                "session integer, " +
+                "id integer" +
+                ");";
         executeSQL(sql);
     }
 
@@ -131,26 +154,44 @@ public class DatabaseCommunication {
 	 */
 
 	private static boolean executeSql(String sql, int sessionID, int id) {
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        Connection conn = connect();
+        try {
+
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, sessionID);
             pstmt.setInt(2, id);
             ResultSet result = pstmt.executeQuery();
             return !result.next();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return false;
     }
 
     private static void basicSql(String sql, int sessionID, int id) {
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, sessionID);
             pstmt.setInt(2, id);
             pstmt.executeUpdate();
+            conn.close();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -213,6 +254,13 @@ public class DatabaseCommunication {
 
     }
 
+    public static void addMessageId(int sessionID, int id) {
+	    String sql = "SELECT * FROM messageSessions WHERE session = ? AND id = ?;";
+	    if (executeSql(sql, sessionID, id)) {
+	        sql = "INSERT INTO messageSessions VALUES (?, ?)";
+	        basicSql(sql, sessionID, id);
+        }
+    }
     /**
      * Adds a new session id to every session table.
      * @param sessionID id of the session.
@@ -220,42 +268,80 @@ public class DatabaseCommunication {
 	public static void basicSql(int sessionID) {
 		// Add model session
 		String sql = "INSERT INTO transactionSessions(session) VALUES(?)";
-		try (Connection conn = connect();
-	             PreparedStatement pstmt  = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+		try {
+            PreparedStatement pstmt  = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        pstmt.executeUpdate();
 	    } catch (SQLException e) {
 	        System.out.println(e.getMessage());
-	    }
+	    } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
 		
 		// Add category session
 		sql = "INSERT INTO categorySessions(session) VALUES(?)";
-		try (Connection conn = connect();
-	             PreparedStatement pstmt  = conn.prepareStatement(sql)) {
+		conn = connect();
+		try {
+
+		    PreparedStatement pstmt  = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        pstmt.executeUpdate();
+            conn.close();
 	    } catch (SQLException e) {
 	        System.out.println(e.getMessage());
-	    }
+	    } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
 
 	    //Add categoryRule session
         sql = "INSERT INTO categoryRuleSessions(session) VALUES(?)";
-		try (Connection conn = connect();
-                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		conn = connect();
+		try {
+
+		    PreparedStatement pstmt = conn.prepareStatement(sql);
 		    pstmt.setInt(1, sessionID);
 		    pstmt.executeUpdate();
+            conn.close();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 
         //Add savingGoal session
         sql = "INSERT INTO savingGoalSessions(session) VALUES(?)";
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		conn = connect();
+        try {
+
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, sessionID);
             pstmt.executeUpdate();
+            conn.close();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -265,18 +351,26 @@ public class DatabaseCommunication {
      */
     public static int getMaxSessionId() {
         String sql = "SELECT max(session) from transactionSessions";
-        try (Connection conn = connect();
-             Statement stmt  = conn.createStatement();
-             ResultSet rs    = stmt.executeQuery(sql)){
+        Connection conn = connect();
+        try {
 
+            Statement stmt  = conn.createStatement();
+            ResultSet rs    = stmt.executeQuery(sql);
             // loop through the result set
             if (rs.next()) {
                 return rs.getInt("max(session)");
             }
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
-        return -1;
+        return 0;
     }
 
     /**
@@ -287,14 +381,23 @@ public class DatabaseCommunication {
 	public static boolean validSessionId(int sessionID) {
 		String sql = "SELECT * FROM transactionSessions " +
                     "WHERE session = ?;";
-		try (Connection conn = connect();
-			 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+		try {
+
+		    PreparedStatement pstmt = conn.prepareStatement(sql);
 			pstmt.setInt(1, sessionID);
 			ResultSet rs  = pstmt.executeQuery();
             return rs.next();
 		} catch (SQLException e) {
 			System.out.println(e.getMessage());
-		}
+		} finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
 		return false;
 	}
 
@@ -341,8 +444,9 @@ public class DatabaseCommunication {
 	    List<Transaction> t = new ArrayList<>();
 	    String sql = "SELECT * FROM transactions WHERE id IN " +
                 "(SELECT transactions FROM transactionSessions WHERE session = ?);";
-	    try (Connection conn = connect();
-                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, sessionID);
 	        ResultSet result = pstmt.executeQuery();
 	        Map<Integer, String> c = getCategories();
@@ -363,6 +467,13 @@ public class DatabaseCommunication {
             return t;
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return t;
     }
@@ -375,8 +486,9 @@ public class DatabaseCommunication {
     private static Map<Integer, String> getCategories() {
 	    Map<Integer, String> c = new HashMap<>();
 	    String sql = "SELECT * FROM categories;";
-	    try (Connection conn = connect();
-                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
 	        ResultSet result = pstmt.executeQuery();
 	        while (result.next()) {
 	            int id = result.getInt("id");
@@ -385,6 +497,13 @@ public class DatabaseCommunication {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return c;
     }
@@ -410,9 +529,10 @@ public class DatabaseCommunication {
 	 */
 
 	private static int getLastIndex(String sql){
-        try (Connection conn = connect();
+	    Connection conn = connect();
+        try {
              Statement stmt  = conn.createStatement();
-             ResultSet rs    = stmt.executeQuery(sql)){
+             ResultSet rs    = stmt.executeQuery(sql);
 
             if (rs.next()) {
                 return rs.getInt(1);
@@ -420,6 +540,13 @@ public class DatabaseCommunication {
             return 0;
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return -1;
     }
@@ -456,8 +583,9 @@ public class DatabaseCommunication {
 	public static Transaction getTransaction(int id, int sessionID) {
 		String sql = "SELECT * FROM transactions WHERE id = ? AND id IN " +
                 "(SELECT transactions FROM transactionSessions WHERE session = ?)";
-		try (Connection conn = connect();
-	             PreparedStatement pstmt  = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+		try {
+	             PreparedStatement pstmt  = conn.prepareStatement(sql);
 	        pstmt.setInt(1, id);
 	        pstmt.setInt(2, sessionID);
 	        ResultSet rs  = pstmt.executeQuery();
@@ -475,7 +603,14 @@ public class DatabaseCommunication {
 	        }
 	    } catch (SQLException e) {
 	        System.out.println(e.getMessage());
-	    }
+	    } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
 		return null;
 	}
 	
@@ -488,7 +623,7 @@ public class DatabaseCommunication {
 			int categoryID, int sessionId) {
 		List<Transaction> transactions = new ArrayList<>();
 		
-		
+		Connection conn = connect();
 		String sql = "SELECT * FROM transactions WHERE ";
 		String sql1 = " id IN (SELECT transactions FROM transactionSessions WHERE session = ?)";
 		if (categoryID != -1) {
@@ -496,8 +631,8 @@ public class DatabaseCommunication {
 		}
 		sql += sql1;
 		sql += " LIMIT ?,?;";
-		try (Connection conn = connect();
-		     PreparedStatement pstmt  = conn.prepareStatement(sql)) {
+		try {
+		    PreparedStatement pstmt  = conn.prepareStatement(sql);
 			if (categoryID != -1) {
 				pstmt.setInt(1, categoryID);
 				pstmt.setInt(2, sessionId);
@@ -520,7 +655,14 @@ public class DatabaseCommunication {
 	        return transactions;
 	    } catch (SQLException e) {
 	        System.out.println(e.getMessage());
-	    }
+	    } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
 		return null;
 		
 	}
@@ -535,21 +677,30 @@ public class DatabaseCommunication {
 	public static List<CategoryRule> getAllCategoryRules(int sessionId) {
 	    String sql = "SELECT * FROM categoryRules WHERE id IN " +
                 "(SELECT categoryRule FROM categoryRuleSessions WHERE session = ?)";
-        try (Connection conn = connect();
-                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, sessionId);
             ResultSet resultSet = pstmt.executeQuery();
             return createCategoryRuleList(resultSet);
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return null;
     }
 	
 	private static void updateCategoryRuleAndTransaction(String sql1, String sql2, int value1, int value2, int value3) {
-        try (Connection conn = connect();
+	    Connection conn = connect();
+        try {
              PreparedStatement pstmt = conn.prepareStatement(sql1);
-             PreparedStatement stmt2 = conn.prepareStatement(sql2)) {
+             PreparedStatement stmt2 = conn.prepareStatement(sql2);
             pstmt.setInt(1, value1);
             pstmt.setInt(2, value2);
             pstmt.executeUpdate();
@@ -558,6 +709,13 @@ public class DatabaseCommunication {
             stmt2.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -569,8 +727,9 @@ public class DatabaseCommunication {
 	 */
 	public static void addTransaction(Transaction t, int sessionID) {
 		String sql = "INSERT INTO transactions(id, date, amount, externalIBAN, type, description) VALUES(?,?,?,?,?,?)";
-		try (Connection conn = connect();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+		try {
+		    PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, t.getId());
             pstmt.setString(2, t.getDate().toString());
             pstmt.setDouble(3, t.getAmount());
@@ -580,6 +739,13 @@ public class DatabaseCommunication {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 
         updatePaymentRequest(t, sessionID);
@@ -597,16 +763,60 @@ public class DatabaseCommunication {
                 break;
             }
         }
+
+        List<Transaction> transactions = getTransactions(sessionID);
+		int month1 = t.getDate().getMonthValue();
+		int year1 = t.getDate().getYear();
+		int month2 = transactions.get(0).getDate().getMonthValue();
+		int year2 = transactions.get(0).getDate().getYear();
+		int difference = month1 - month2 + 12 * (year1 - year2);
+		if ((difference >= 3 || checkForNewBalanceReachedNewHigh(sessionID)) && !unreadHighBalanceMessage(sessionID)) {
+            int id = getLastMessageID() + 1;
+            Message m = new Message(id, "Balance reached new high", t.getDate().toString(), "info");
+            addMessageId(sessionID, id);
+            addMessage(m);
+        }
+    }
+
+    private static boolean checkForNewBalanceReachedNewHigh(int sessionID) {
+	    String sql = "SELECT * FROM messages WHERE message LIKE 'Balance reached new high' AND id IN " +
+                "(SELECT id FROM messageSessions WHERE session = ?)";
+	    Connection conn = connect();
+	    try {
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
+	        pstmt.setInt(1, sessionID);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        return resultSet.next();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
+
+        return false;
     }
 
     private static void updateBalance(String sql, double balance, int id) {
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setDouble(1, balance);
             pstmt.setInt(2, id);
             pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -615,8 +825,9 @@ public class DatabaseCommunication {
                 "(SELECT transactions FROM transactionSessions WHERE session = ?) " +
                 "ORDER BY date;";
 	    List<Transaction> transactions = new ArrayList<>();
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        ResultSet resultSet = pstmt.executeQuery();
 	        double balance = 0;
@@ -644,6 +855,13 @@ public class DatabaseCommunication {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         for (Transaction search : transactions) {
 	        sql = "UPDATE transactions SET balance = ? WHERE id = ?;";
@@ -658,8 +876,9 @@ public class DatabaseCommunication {
      */
     public static void addCategoryRule(CategoryRule cr, int sessionID) {
         String sql = "INSERT INTO categoryRules VALUES(?, ?, ?, ?, ?, ?)";
-        try (Connection conn = connect();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        Connection conn = connect();
+        try {
+             PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, cr.getId());
             pstmt.setString(2, cr.getDescription());
             pstmt.setString(3, cr.getiBan());
@@ -670,6 +889,13 @@ public class DatabaseCommunication {
 
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 
         List<Transaction> t = getTransactions(sessionID);
@@ -698,8 +924,9 @@ public class DatabaseCommunication {
 	    CategoryRule cr = null;
 	    String sql = "SELECT * FROM categoryRules WHERE id = ? AND id IN " +
                 "(SELECT categoryRule FROM categoryRuleSessions WHERE session = ?)";
-	    try (Connection conn = connect();
-                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, id);
 	        pstmt.setInt(2, sessionID);
 	        ResultSet rs = pstmt.executeQuery();
@@ -711,6 +938,13 @@ public class DatabaseCommunication {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return cr;
     }
@@ -730,8 +964,9 @@ public class DatabaseCommunication {
                 "WHERE id = ? " +
                 "AND id IN " +
                 "(SELECT categoryRule FROM categoryRuleSessions WHERE session = ?)";
-	    try (Connection conn = connect();
-                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setString(1, categoryRule.getDescription());
 	        pstmt.setString(2, categoryRule.getiBan());
 	        pstmt.setString(3, categoryRule.getType().toString());
@@ -741,6 +976,13 @@ public class DatabaseCommunication {
 	        pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -781,8 +1023,9 @@ public class DatabaseCommunication {
                 + "balance = ? "
                 + "WHERE id = ? AND id IN "
                 + "(SELECT transactions FROM transactionSessions WHERE session = ?)";
-        try (Connection conn = connect();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             // set the corresponding param
             pstmt.setString(1, t.getDate().toString());
             pstmt.setDouble(2, t.getAmount());
@@ -796,6 +1039,13 @@ public class DatabaseCommunication {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 	}
 	
@@ -813,8 +1063,9 @@ public class DatabaseCommunication {
 	public static void assignCategory(int categoryID, int transactionID) {
 		String sql = "UPDATE transactions SET categoryID = ?"
                 + "WHERE id = ?";
-        try (Connection conn = connect();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
         		
         		
             // set the corresponding param
@@ -824,6 +1075,13 @@ public class DatabaseCommunication {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 	}
 	
@@ -837,8 +1095,9 @@ public class DatabaseCommunication {
 		
 		String sql = "SELECT * FROM categories WHERE id IN " +
                 "(SELECT categories FROM categorySessions WHERE session = ?)";
-		try (Connection conn = connect();
-	             PreparedStatement pstmt  = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+		try {
+		    PreparedStatement pstmt  = conn.prepareStatement(sql);
 		    pstmt.setInt(1, sessionId);
 			ResultSet rs  = pstmt.executeQuery();
 	        while (rs.next()) {
@@ -847,7 +1106,14 @@ public class DatabaseCommunication {
 	        return categories;
 	    } catch (SQLException e) {
 	        System.out.println(e.getMessage());
-	    }
+	    } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
 		return null;
 	}
 	/**
@@ -857,14 +1123,21 @@ public class DatabaseCommunication {
 	 */
 	public static void addCategory(Category c) {
 		String sql = "INSERT INTO categories VALUES(?,?)";
-		
-		try (Connection conn = connect();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+		try {
+		    PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, c.getId());
             pstmt.setString(2, c.getName());
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 	}
 	
@@ -878,7 +1151,9 @@ public class DatabaseCommunication {
 	public static Category getCategory(int id, int sessionId) {
 		String sql = "SELECT * FROM categories WHERE id = ? AND id IN " +
                 "(SELECT categories FROM categorySessions WHERE session = ?)";
-		try (Connection conn = connect(); PreparedStatement pstmt  = conn.prepareStatement(sql)) {
+		Connection conn = connect();
+		try {
+             PreparedStatement pstmt  = conn.prepareStatement(sql);
 		    pstmt.setInt(1, id);
 		    pstmt.setInt(2, sessionId);
 	        ResultSet rs  = pstmt.executeQuery();
@@ -887,7 +1162,14 @@ public class DatabaseCommunication {
 	        }
 	    } catch (SQLException e) {
 	        System.out.println(e.getMessage());
-	    }
+	    } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
 		return null;
 	}
 	
@@ -913,9 +1195,9 @@ public class DatabaseCommunication {
 		String sql = "UPDATE categories SET name = ? "
                 + "WHERE id = ? AND id IN "
                 + "(SELECT categories FROM categorySessions WHERE session = ?)";
-
-        try (Connection conn = connect();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        Connection conn = connect();
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
         		// set the corresponding param
             pstmt.setString(1, c.getName());
             pstmt.setInt(2, id);
@@ -924,6 +1206,13 @@ public class DatabaseCommunication {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 	}
 
@@ -951,8 +1240,9 @@ public class DatabaseCommunication {
 	    String sql = "SELECT * FROM transactions t WHERE t.id IN " +
                 "(SELECT transactions FROM transactionSessions WHERE session = ?) " +
                 "ORDER BY t.date;";
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        ResultSet resultSet = pstmt.executeQuery();
 	        double balance = 0;
@@ -1004,6 +1294,13 @@ public class DatabaseCommunication {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return null;
     }
@@ -1012,8 +1309,9 @@ public class DatabaseCommunication {
 	    String sql = "SELECT * FROM SavingGoals WHERE id IN " +
                 "(SELECT goal_id FROM savingGoalSessions WHERE session = ?);";
 	    List<SavingGoal> savingGoalList = new ArrayList<>();
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        ResultSet resultSet = pstmt.executeQuery();
 	        while (resultSet.next()) {
@@ -1030,14 +1328,22 @@ public class DatabaseCommunication {
             return savingGoalList;
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return null;
     }
 
     public static void addSavingGoal(SavingGoal savingGoal) {
 	    String sql = "INSERT INTO SavingGoals VALUES (?, ?, ?, ?, ?, ?);";
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, savingGoal.getId());
 	        pstmt.setString(2, savingGoal.getName());
 	        pstmt.setDouble(3, savingGoal.getGoal());
@@ -1047,6 +1353,13 @@ public class DatabaseCommunication {
 	        pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -1054,8 +1367,9 @@ public class DatabaseCommunication {
 	    String sql = "select t.id, t.balance from transactions t, transactionSessions ts where t.id = ts.transactions and ts.session = 1 order by date desc limit 0, 1;";
 	    int transactionId = 0;
 	    double balance = 0;
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        ResultSet resultSet = pstmt.executeQuery();
 	        if (resultSet.next()) {
 	            transactionId = resultSet.getInt(1);
@@ -1063,12 +1377,20 @@ public class DatabaseCommunication {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 
         sql = "SELECT balance FROM savingGoals WHERE id = ? AND " +
                 "(SELECT goal_id FROM savingGoalSessions WHERE session = ?)";
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, id);
 	        pstmt.setInt(2, sessionID);
 	        ResultSet resultSet = pstmt.executeQuery();
@@ -1077,6 +1399,13 @@ public class DatabaseCommunication {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
 
         sql = "UPDATE transactions SET balance = ? WHERE id = ?;";
@@ -1095,26 +1424,42 @@ public class DatabaseCommunication {
 
     public static boolean checkValidSavingGoal(int id) {
 	    String sql = "SELECT * FROM SavingGoals WHERE id = ?;";
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, id);
 	        ResultSet resultSet = pstmt.executeQuery();
 	        return resultSet.next();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return false;
     }
 
     public static void updateSavingGoal(SavingGoal sg) {
 	    String sql = "UPDATE SavingGoals SET balance = ? WHERE id = ?;";
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setDouble(1, sg.getBalance());
 	        pstmt.setInt(2, sg.getId());
 	        pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -1123,8 +1468,9 @@ public class DatabaseCommunication {
                 "(SELECT transactions FROM transactionSessions WHERE session = ?) " +
                 "ORDER BY date DESC LIMIT 0, 2;";
 	    List<Transaction> transactions = new ArrayList<>();
-	    try (Connection conn = connect();
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	    Connection conn = connect();
+	    try {
+            PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        ResultSet resultSet = pstmt.executeQuery();
 	        while (resultSet.next()) {
@@ -1141,7 +1487,15 @@ public class DatabaseCommunication {
 	        }
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
+
         if (transactions.size() > 1) {
             int year1 = transactions.get(0).getDate().getYear();
             int year2 = transactions.get(1).getDate().getYear();
@@ -1159,6 +1513,12 @@ public class DatabaseCommunication {
                     i++;
                 }
                 updateSavingGoal(search);
+                if (search.getGoal() <= search.getBalance()) {
+                    int id = getLastMessageID() + 1;
+                    Message m = new Message(id, "Saving goal " + search.getName() + " reached", transactions.get(0).getDate().toString(), "info");
+                    addMessage(m);
+                    addMessageId(sessionID, id);
+                }
                 updateTransaction(t, t.getId(), sessionID);
             }
         }
@@ -1166,8 +1526,8 @@ public class DatabaseCommunication {
 
 	public static void addPaymentRequest(PaymentRequest paymentRequest) {
 		String sql = "INSERT INTO paymentRequests(id, description, due_date, amount, number_of_requests) VALUES(?, ?, ?, ?, ?);";
+		Connection conn = connect();
 		try {
-		    Connection conn = connect();
 		    PreparedStatement pstmt = conn.prepareStatement(sql);
 		    pstmt.setInt(1, paymentRequest.getId());
 		    pstmt.setString(2, paymentRequest.getDescription());
@@ -1177,6 +1537,13 @@ public class DatabaseCommunication {
 		    pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
     }
 
@@ -1184,9 +1551,10 @@ public class DatabaseCommunication {
 	    String sql = "SELECT * FROM paymentRequests WHERE id IN " +
                 "(SELECT id FROM paymentRequestSessions WHERE session = ?)";
 	    List<PaymentRequest> paymentRequests = new ArrayList<>();
+	    Connection conn = connect();
 	    try {
 	        Map<Integer, Transaction> transactionMap = getTrasactions(sessionID);
-	        Connection conn = connect();
+
 	        PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        ResultSet resultSet = pstmt.executeQuery();
@@ -1215,6 +1583,13 @@ public class DatabaseCommunication {
             return paymentRequests;
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return paymentRequests;
     }
@@ -1223,9 +1598,10 @@ public class DatabaseCommunication {
 	    String sql = "SELECT * FROM transactions WHERE id IN " +
                 "(SELECT id FROM transactionSessions WHERE session = ?)";
 	    Map<Integer, Transaction> transactionMap = new HashMap<>();
+	    Connection conn = connect();
 	    try {
 	        Map<Integer, String> categoryMap = getCategories();
-	        Connection conn = connect();
+
 	        PreparedStatement pstmt = conn.prepareStatement(sql);
 	        pstmt.setInt(1, sessionID);
 	        ResultSet resultSet = pstmt.executeQuery();
@@ -1246,6 +1622,13 @@ public class DatabaseCommunication {
             return transactionMap;
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
         }
         return transactionMap;
     }
@@ -1262,7 +1645,7 @@ public class DatabaseCommunication {
         PaymentRequest paymentRequest = null;
         if (t.getType().equals(TransactionType.deposit)) {
             for (PaymentRequest search : paymentRequests) {
-                if (search.getAmount() == t.getAmount() && LocalDateTime.parse(search.getDue_date()).compareTo(LocalDateTime.now()) > 0) {
+                if (search.getAmount() == t.getAmount() && LocalDateTime.parse(search.getDue_date()).compareTo(t.getDate()) > 0) {
                     if (search.getTransactions()[search.getTransactions().length - 1] == null) {
                         paymentRequest = search;
                         changed = true;
@@ -1271,6 +1654,16 @@ public class DatabaseCommunication {
                 }
             }
         }
+
+        for (PaymentRequest search : paymentRequests) {
+            if (LocalDateTime.parse(search.getDue_date()).compareTo(t.getDate()) < 0) {
+                int id = getLastMessageID() + 1;
+                Message m = new Message(id, "One payment request has not been filled", t.getDate().toString(), "warning");
+                addMessage(m);
+                addMessageId(sessionID, id);
+            }
+        }
+
         if (changed) {
             for (int i = 0; i < paymentRequest.getTransactions().length; i++) {
                 if (paymentRequest.getTransactions()[i] == null) {
@@ -1281,6 +1674,12 @@ public class DatabaseCommunication {
 
             if (paymentRequest.getTransactions()[paymentRequest.getTransactions().length - 1] != null) {
                 paymentRequest.setFilled(true);
+                System.out.println("am intrat aci");
+                int id = getLastMessageID() + 1;
+                Message m = new Message(id, "One payment request has been filled",
+                        paymentRequest.getTransactions()[paymentRequest.getTransactions().length - 1].getDate().toString(), "info");
+                addMessage(m);
+                addMessageId(sessionID, id);
             }
 
             String string = "";
@@ -1295,8 +1694,9 @@ public class DatabaseCommunication {
             }
 
             String sql = "UPDATE paymentRequests SET filled = ?, transactions = ? WHERE id = ?;";
+            Connection conn = connect();
             try {
-                Connection conn = connect();
+
                 PreparedStatement pstmt = conn.prepareStatement(sql);
                 pstmt.setBoolean(1, paymentRequest.isFilled());
                 pstmt.setString(2, string);
@@ -1304,12 +1704,201 @@ public class DatabaseCommunication {
                 pstmt.executeUpdate();
             } catch (SQLException e) {
                 e.printStackTrace();
+            } finally {
+                if (conn != null) {
+                    try {
+                        conn.close();
+                    } catch (SQLException e) {
+                    }
+                }
             }
         }
     }
 
+    public static List<Message> getMessages(int sessionID) {
+	    String sql = "SELECT * FROM messages WHERE id IN " +
+                "(SELECT id FROM messageSessions WHERE session = ?);";
+	    List<Message> messages = new ArrayList<>();
+        Connection conn = connect();
+	    try {
+
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
+	        pstmt.setInt(1, sessionID);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        while (resultSet.next()) {
+	            int id = resultSet.getInt(1);
+	            String message = resultSet.getString(2);
+	            String date = resultSet.getString(3);
+	            boolean read = resultSet.getBoolean(4);
+	            String type = resultSet.getString(5);
+	            Message m = new Message(id, message, date, type);
+	            m.setRead(read);
+	            messages.add(m);
+            }
+            conn.close();
+            return messages;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close(); // <-- This is important
+                } catch (SQLException e) {
+                    /* handle exception */
+                }
+            }
+        }
+        return messages;
+    }
+
+    public static void updateMessage(int id, int sessionID) {
+	    String sql = "UPDATE messages SET read = 1 WHERE id = ? AND id IN " +
+                "(SELECT id FROM messageSessions WHERE session = ?);";
+	    Connection conn = connect();
+	    try {
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
+	        pstmt.setInt(1, id);
+	        pstmt.setInt(2, sessionID);
+	        pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
+    }
+
+    public static void addMessage(Message m) {
+	    String sql = "INSERT INTO messages VALUES(?, ?, ?, ?, ?);";
+	    Connection conn = connect();
+	    try {
+
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
+	        pstmt.setInt(1, m.getId());
+	        pstmt.setString(2, m.getMessage());
+	        pstmt.setString(3, m.getDate());
+	        pstmt.setBoolean(4, m.isRead());
+	        pstmt.setString(5, m.getType().toString());
+	        pstmt.executeUpdate();
+            conn.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
+    }
+
+    public static Message getMessage(int id, int sessionID) {
+	    String sql = "SELECT * FROM messages WHERE id = ? AND id IN " +
+                "(SELECT id FROM messageSessions WHERE session = ?);";
+	    Message m;
+	    Connection conn = connect();
+	    try {
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
+	        pstmt.setInt(1, id);
+	        pstmt.setInt(2, sessionID);
+            ResultSet resultSet = pstmt.executeQuery();
+            if (resultSet != null) {
+                int id1 = resultSet.getInt(1);
+                String message = resultSet.getString(2);
+                String date = resultSet.getString(3);
+                boolean read = resultSet.getBoolean(4);
+                String type = resultSet.getString(5);
+                m = new Message(id1, message, date, type);
+                m.setRead(read);
+                return m;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
+        return null;
+    }
+
+    public static int getLastMessageID() {
+	    String sql = "SELECT m.id FROM messages m WHERE NOT EXISTS " +
+                "(SELECT id FROM messages WHERE id = m.id + 1);";
+	    return getLastIndex(sql);
+    }
+
+    public static void checkBalance(int sessionID, String date) {
+	    String sql = "SELECT balance FROM transactions WHERE id IN " +
+                "(SELECT transactions FROM transactionSessions WHERE session = ?) ORDER BY id DESC LIMIT 0,1";
+	    double balance = 0;
+	    Connection conn = connect();
+	    try {
+
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
+	        pstmt.setInt(1, sessionID);
+	        ResultSet resultSet = pstmt.executeQuery();
+	        balance = resultSet.getDouble(1);
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
+
+        if (balance < 0) {
+            int id = getLastMessageID() + 1;
+            Message m = new Message(id, "Balance is negative", date, "warning");
+            addMessage(m);
+            addMessageId(sessionID, id);
+        }
+    }
+
+    public static boolean unreadHighBalanceMessage(int sessionID) {
+	    String sql = "SELECT * FROM messages WHERE type LIKE 'info' AND message LIKE 'Balance reached new high' AND id IN" +
+                "(SELECT id FROM messageSessions WHERE session = ?) AND read = 0;";
+	    Connection conn = connect();
+	    try {
+
+	        PreparedStatement pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, sessionID);
+            ResultSet resultSet = pstmt.executeQuery();
+            return resultSet.next();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
+
+        return false;
+    }
+
 	public static void main(String[] args) {
-//        DatabaseCommunication.updateBalance(5);
-        DatabaseCommunication.updateSavingGoals(5);
+//	    DatabaseCommunication.generateTables();
+//	    int id = DatabaseCommunication.getLastMessageID();
+//	    Message m = new Message(id + 1, "message", LocalDateTime.now().toString(), "info");
+//	    DatabaseCommunication.addMessage(m);
+//	    DatabaseCommunication.addTransactionId(1, 1);
+//	    DatabaseCommunication.addMessageId(1, 1);
+////        DatabaseCommunication.updateMessage(id + 1, 1);
+////		DatabaseCommunication.addTransactionId(1, 1);
     }
 }
